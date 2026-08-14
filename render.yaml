@@ -1,0 +1,35 @@
+# One-click backend deploy for RelayOne (Render blueprint).
+#
+# Steps:
+#   1. Push this repo to GitHub (done).
+#   2. Go to https://render.com → New → Blueprint → pick this repo.
+#   3. Deploy. You'll get a URL like https://relayone-api.onrender.com
+#   4. Open your frontend once with that URL appended:
+#        https://<your-frontend>/login?api=https://relayone-api.onrender.com
+#      (it's saved in the browser, so you only do this once.)
+#   5. In the Render dashboard set STORAGE_PUBLIC_BASE_URL to
+#        https://relayone-api.onrender.com/uploads   (needed for file attachments)
+#
+# Note: free instances sleep when idle and use ephemeral disk, so the pglite
+# demo database resets on redeploy — just register again. NODE_ENV=development
+# exposes the OTP code to the client so you can sign in without an email/SMS
+# provider (fine for a personal demo; don't use for real users).
+services:
+  - type: web
+    name: relayone-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: DB_CLIENT
+        value: pglite
+      - key: PGLITE_DATA_DIR
+        value: ./.pglite
+      - key: CORS_ORIGIN
+        value: https://mikeliashenko.github.io
+      - key: STORAGE_PUBLIC_BASE_URL
+        sync: false

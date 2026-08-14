@@ -1,0 +1,9 @@
+{
+  "name": "relayone",
+  "private": true,
+  "description": "RelayOne — run the API backend and the static frontend together.",
+  "scripts": {
+    "setup": "npm --prefix server install",
+    "dev": "npx --yes concurrently -k -n api,web -c blue,green \"npm --prefix server run dev\" \"npx --yes serve -l 4321 .\""
+  }
+}
