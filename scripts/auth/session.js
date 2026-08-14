@@ -12,9 +12,34 @@
  * tokens or secrets), and `window.__relayone` exposes inspection helpers.
  */
 
-export const API_BASE =
-  (typeof window !== "undefined" && window.RELAYONE_API_BASE) ||
-  "http://localhost:4000";
+/**
+ * Resolve the backend base URL. RelayOne's frontend is static, but the API is a
+ * separate Node server — on static hosting (e.g. GitHub Pages) you must point it
+ * at a running backend. Priority:
+ *   1. window.RELAYONE_API_BASE  (set inline before scripts load)
+ *   2. ?api=<url>                (persisted to localStorage, so you set it once)
+ *   3. localStorage "relayone.apiBase"
+ *   4. http://localhost:4000     (local dev default)
+ */
+function resolveApiBase() {
+  if (typeof window === "undefined") return "http://localhost:4000";
+  if (window.RELAYONE_API_BASE) return String(window.RELAYONE_API_BASE).replace(/\/+$/, "");
+  try {
+    const q = new URLSearchParams(location.search).get("api");
+    if (q) {
+      const clean = q.replace(/\/+$/, "");
+      localStorage.setItem("relayone.apiBase", clean);
+      return clean;
+    }
+    const saved = localStorage.getItem("relayone.apiBase");
+    if (saved) return saved;
+  } catch {
+    /* storage unavailable */
+  }
+  return "http://localhost:4000";
+}
+
+export const API_BASE = resolveApiBase();
 export const API = `${API_BASE}/api`;
 
 export const IS_DEV = ["localhost", "127.0.0.1", "[::1]", ""].includes(
