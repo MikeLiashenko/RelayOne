@@ -935,17 +935,25 @@ function updateReplyBar() {
   const bar = $('[data-role="reply-bar"]');
   if (state.editing) {
     bar.hidden = false;
+    bar.dataset.mode = "edit";
     $('[data-role="reply-label"]').textContent = "Editing message";
-    $('[data-role="reply-text"]').textContent = "";
+    $('[data-role="reply-text"]').textContent = state.reply?.content ?? "";
     return;
   }
   if (state.reply) {
     bar.hidden = false;
+    bar.dataset.mode = "reply";
     $('[data-role="reply-label"]').textContent = `Replying to ${senderName(state.reply.senderId)}`;
-    $('[data-role="reply-text"]').textContent = state.reply.content ?? "";
+    $('[data-role="reply-text"]').textContent = replyPreviewText(state.reply);
     return;
   }
   bar.hidden = true;
+}
+
+/** Preview text for the reply bar — handles attachment-only / empty messages. */
+function replyPreviewText(r) {
+  if (r.content) return r.content;
+  return "Attachment";
 }
 
 async function deleteMessage(m) {

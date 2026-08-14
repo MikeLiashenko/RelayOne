@@ -431,16 +431,37 @@
 
 /* Reply bar + composer ---------------------------------------------------- */
 .reply-bar {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  margin: 0 var(--space-4);
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 5px 6px 5px 10px;
+  margin: 8px var(--space-4) 0;
+  background: color-mix(in srgb, var(--color-blue) 10%, var(--surface-field));
+  border: 1px solid var(--border-subtle);
   border-left: 3px solid var(--color-blue);
-  background: var(--surface-field);
-  border-radius: var(--radius-md);
+  border-radius: 8px;
 }
-.reply-bar__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.reply-bar__label { font-size: 0.8125rem; font-weight: var(--fw-semibold); color: var(--color-blue); }
-.reply-bar__text { font-size: 0.8125rem; color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reply-bar__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
+.reply-bar__label {
+  font-size: 0.75rem; font-weight: var(--fw-semibold); color: var(--color-blue);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.reply-bar__label::before { content: "↩"; font-size: 0.8rem; line-height: 1; }
+.reply-bar[data-mode="edit"] .reply-bar__label::before { content: "✎"; }
+.reply-bar__text {
+  font-size: 0.8125rem; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.reply-bar .icon-btn { width: 30px; height: 30px; flex: 0 0 auto; }
+.reply-bar .icon-btn svg { width: 16px; height: 16px; }
+
+/* Thin composer scrollbar — no ugly native up/down arrow buttons. */
+.composer__input { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.composer__input::-webkit-scrollbar { width: 8px; }
+.composer__input::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
 
 .composer-error {
   margin: var(--space-2) var(--space-4) 0;
