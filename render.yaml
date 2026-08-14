@@ -21,7 +21,7 @@ services:
     plan: free
     rootDir: server
     buildCommand: npm install && npm run build
-    startCommand: node dist/server.js
+    startCommand: node dist/src/server.js
     envVars:
       - key: NODE_ENV
         value: development

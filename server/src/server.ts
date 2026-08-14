@@ -16,8 +16,10 @@ async function main(): Promise<void> {
   if (env.DB_CLIENT === "pglite") {
     const path = await import("node:path");
     const { migrate } = await import("drizzle-orm/pglite/migrator");
+    // Resolve relative to the working dir (server/) so it works whether we run
+    // from source (tsx) or the compiled build (dist/src/server.js on Render).
     await migrate(getDb() as never, {
-      migrationsFolder: path.resolve(__dirname, "../drizzle"),
+      migrationsFolder: path.resolve(process.cwd(), "drizzle"),
     });
     // eslint-disable-next-line no-console
     console.log("✓ PGlite migrations applied (local dev mode).");
