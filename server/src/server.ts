@@ -11,18 +11,22 @@ import { attachRealtime } from "./realtime/gateway";
 async function main(): Promise<void> {
   await initDb();
 
-  // Zero-setup local dev: PGlite starts empty, so apply migrations on boot.
-  // (Real Postgres uses the explicit `npm run db:migrate` step instead.)
-  if (env.DB_CLIENT === "pglite") {
+  // Apply migrations on boot (idempotent — Drizzle tracks what's applied). Works
+  // for both the in-process PGlite dev DB and a real Postgres (e.g. on Render).
+  // Resolve relative to the working dir (server/) so it works from source (tsx)
+  // and from the compiled build (dist/src/server.js).
+  {
     const path = await import("node:path");
-    const { migrate } = await import("drizzle-orm/pglite/migrator");
-    // Resolve relative to the working dir (server/) so it works whether we run
-    // from source (tsx) or the compiled build (dist/src/server.js on Render).
-    await migrate(getDb() as never, {
-      migrationsFolder: path.resolve(process.cwd(), "drizzle"),
-    });
+    const migrationsFolder = path.resolve(process.cwd(), "drizzle");
+    if (env.DB_CLIENT === "pglite") {
+      const { migrate } = await import("drizzle-orm/pglite/migrator");
+      await migrate(getDb() as never, { migrationsFolder });
+    } else {
+      const { migrate } = await import("drizzle-orm/postgres-js/migrator");
+      await migrate(getDb() as never, { migrationsFolder });
+    }
     // eslint-disable-next-line no-console
-    console.log("✓ PGlite migrations applied (local dev mode).");
+    console.log("✓ Database migrations applied.");
   }
 
   const app = createApp();
