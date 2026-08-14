@@ -1,0 +1,27 @@
+# Dependencies / build output
+node_modules/
+dist/
+coverage/
+
+# Secrets & local env (never commit real values — see server/.env.example)
+.env
+.env.local
+.env.*.local
+server/.env
+server/.env.local
+
+# Local object storage + runtime data
+var/
+server/var/
+
+# PGlite local database
+.pglite/
+server/.pglite/
+
+# Agent / editor / OS local files
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

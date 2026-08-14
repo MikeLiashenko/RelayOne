@@ -1,0 +1,200 @@
+/* ==========================================================================
+   RelayOne — Welcome screen
+   ========================================================================== */
+
+.welcome {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* A single, tight, restrained wash sitting just behind the symbol — enough to
+   give depth, not a diffuse cloud. */
+.welcome::before {
+  content: "";
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  width: min(440px, 62vw);
+  height: min(440px, 62vw);
+  transform: translate(-50%, -50%);
+  background:
+    radial-gradient(circle at center,
+      rgba(22, 139, 255, 0.10) 0%,
+      rgba(113, 59, 255, 0.06) 40%,
+      transparent 62%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.welcome__main {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-5) var(--space-6);
+  text-align: center;
+}
+
+/* --- Brand block: symbol + wordmark + tagline ------------------------- */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.brand__symbol {
+  position: relative;
+  width: clamp(96px, 9vw, 116px);
+  height: clamp(96px, 9vw, 116px);
+}
+
+.brand__symbol img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* A tight, contained halo — hugs the mark for depth without the diffuse
+   cloud that washed it out. */
+.brand__symbol::before {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 46%,
+      rgba(34, 120, 255, 0.42) 0%,
+      rgba(113, 59, 255, 0.22) 45%,
+      transparent 70%);
+  filter: blur(16px);
+  z-index: 0;
+}
+
+.brand__text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brand__wordmark {
+  margin: 0;
+  font-size: clamp(2rem, 1.55rem + 1.7vw, 2.6rem);   /* 32 → ~42px */
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.brand__tagline {
+  margin: 0;
+  font-size: clamp(1rem, 0.94rem + 0.3vw, 1.125rem); /* 16 → 18px */
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  color: var(--color-muted);
+}
+
+/* --- Actions ---------------------------------------------------------- */
+.welcome__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+/* --- Footer legal ----------------------------------------------------- */
+.welcome__legal {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  text-align: center;
+  font-size: var(--fs-legal);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.welcome__legal a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.welcome__legal a:hover {
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Entrance choreography: logo → wordmark/tagline → buttons → legal
+   ========================================================================== */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes rise-symbol {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Default state before JS marks the page ready: hidden, ready to animate. */
+.is-animated .brand__symbol,
+.is-animated .brand__wordmark,
+.is-animated .brand__tagline,
+.is-animated .welcome__actions,
+.is-animated .welcome__legal {
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+/* Resting state is explicitly visible (opacity: 1) so the content can never
+   get stuck hidden if animations are paused/unsupported; `backwards` fill
+   still holds each element hidden through its stagger delay, then plays it in
+   and settles back on the visible resting state. */
+.is-animated.is-ready .brand__symbol {
+  opacity: 1;
+  animation: rise-symbol 720ms var(--ease-out) backwards;
+}
+.is-animated.is-ready .brand__wordmark {
+  opacity: 1;
+  animation: rise 620ms var(--ease-out) 220ms backwards;
+}
+.is-animated.is-ready .brand__tagline {
+  opacity: 1;
+  animation: rise 620ms var(--ease-out) 340ms backwards;
+}
+.is-animated.is-ready .welcome__actions {
+  opacity: 1;
+  animation: rise 640ms var(--ease-out) 520ms backwards;
+}
+.is-animated.is-ready .welcome__legal {
+  opacity: 1;
+  animation: rise 640ms var(--ease-out) 680ms backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-animated .brand__symbol,
+  .is-animated .brand__wordmark,
+  .is-animated .brand__tagline,
+  .is-animated .welcome__actions,
+  .is-animated .welcome__legal {
+    opacity: 1;
+    animation: none !important;
+    will-change: auto;
+  }
+}

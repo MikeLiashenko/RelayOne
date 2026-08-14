@@ -1,0 +1,24 @@
+# Local development database for RelayOne.
+# Credentials here are LOCAL-ONLY placeholders — never reuse them in any
+# hosted environment. Start with: docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: relayone-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: relayone
+      POSTGRES_PASSWORD: relayone
+      POSTGRES_DB: relayone
+    ports:
+      - "5432:5432"
+    volumes:
+      - relayone_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relayone -d relayone"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  relayone_pgdata:

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#080B1A" />
+  <meta name="description" content="Log in to RelayOne." />
+  <title>Log in — RelayOne</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+  />
+
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/components/button.css" />
+  <link rel="stylesheet" href="styles/components/field.css" />
+  <link rel="stylesheet" href="styles/auth.css" />
+</head>
+<body>
+  <main class="auth">
+    <section class="auth-card" data-active-step="1" aria-live="polite">
+      <header class="auth-card__bar">
+        <button class="auth-back" type="button" data-action="back" aria-label="Go back">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <span></span>
+      </header>
+
+      <div class="auth-steps">
+
+        <!-- STEP 1 — identify -->
+        <section class="step step--active" data-step="identify">
+          <div class="step__symbol">
+            <img src="assets/logo-symbol.svg" alt="" width="68" height="68" />
+          </div>
+          <div class="step__head" style="margin-top: var(--space-4)">
+            <h1 class="step__title" tabindex="-1">Log in to RelayOne</h1>
+            <p class="step__subtitle">Welcome back. Enter your phone or email.</p>
+          </div>
+
+          <form class="step__form" data-form="login" novalidate>
+            <div class="field" data-field="identifier">
+              <label class="field__label" for="identifier">Phone or email</label>
+              <div class="field__control">
+                <input class="field__input" id="identifier" name="identifier"
+                       type="text" autocomplete="username" placeholder="Phone or email"
+                       aria-describedby="login-msg" />
+              </div>
+              <p class="field__message" id="login-msg" data-role="message"
+                 data-tone="error" role="alert" hidden></p>
+            </div>
+
+            <button class="btn btn--primary" type="submit"
+                    data-action="submit-login" disabled>Continue</button>
+          </form>
+
+          <p class="step__alt">
+            New to RelayOne? <a href="register.html">Create account</a>
+          </p>
+        </section>
+
+        <!-- STEP 2 — verify -->
+        <section class="step" data-step="verify" hidden>
+          <div class="step__head">
+            <h1 class="step__title" tabindex="-1">Verify your account</h1>
+            <p class="step__subtitle">
+              Enter the 6-digit code we sent to
+              <strong data-role="destination">your account</strong>.
+            </p>
+          </div>
+
+          <form class="step__form" data-form="verify" novalidate>
+            <div class="otp" data-role="otp"></div>
+            <p class="field__message" data-role="verify-message" data-tone="error"
+               role="alert" hidden></p>
+
+            <button class="btn btn--primary" type="submit"
+                    data-action="submit-verify" disabled>Verify</button>
+
+            <p class="resend">
+              <span data-role="resend-label">Didn’t get it?</span>
+              <button class="resend__btn" type="button" data-action="resend"
+                      disabled>Resend code</button>
+            </p>
+
+            <button class="dev-hint" type="button" data-role="dev-hint" hidden>
+              <span class="dev-hint__tag">DEV</span>
+              <span>No email provider yet — tap to fill code
+                <strong data-role="dev-hint-code"></strong></span>
+            </button>
+          </form>
+        </section>
+
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="scripts/login.js"></script>
+</body>
+</html>

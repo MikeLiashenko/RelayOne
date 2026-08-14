@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#080B1A" />
+  <meta name="description" content="RelayOne — messaging." />
+  <title>RelayOne</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+  />
+
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/app.css" />
+  <link rel="stylesheet" href="styles/calls.css" />
+  <link rel="stylesheet" href="styles/features.css" />
+</head>
+<body>
+  <div class="messenger" data-view="list" hidden>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar">
+      <header class="sidebar__top">
+        <div class="sidebar__brand">
+          <img src="assets/logo-symbol.svg" alt="" width="28" height="28" />
+          <span>RelayOne</span>
+        </div>
+        <div class="sidebar__top-actions">
+          <button class="icon-btn" type="button" data-action="open-settings" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="2"/>
+              <path d="M19.4 13.5a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.7.7v.1a2 2 0 1 1-4 0v-.1a1 1 0 0 0-1.7-.7l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0-.7-1.7H6a2 2 0 1 1 0-4h.1a1 1 0 0 0 .7-1.7l-.1-.1A2 2 0 1 1 9.5 4.5l.1.1a1 1 0 0 0 1.7-.7V3.8a2 2 0 1 1 4 0v.1a1 1 0 0 0 1.7.7l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1"
+                    stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="icon-btn" type="button" data-action="new-chat" title="New chat" aria-label="New chat">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="sidebar__search">
+        <input type="search" class="search-input" data-role="chat-search"
+               placeholder="Search chats" aria-label="Search chats" />
+      </div>
+
+      <!-- 🚀 What's-new banner -->
+      <div class="feature-banner" data-role="feature-banner" hidden>
+        <span class="feature-banner__emoji">🚀</span>
+        <div class="feature-banner__body">
+          <strong>New in RelayOne</strong>
+          <span>Folders, Themes, Drafts &amp; more</span>
+        </div>
+        <button class="feature-banner__cta" type="button" data-action="open-whatsnew">See what's new</button>
+        <button class="feature-banner__x icon-btn" type="button" data-action="dismiss-banner" aria-label="Dismiss">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 🗂️ Folders -->
+      <div class="folders" data-role="folders"></div>
+
+      <!-- ⭐ Saved Messages -->
+      <button class="saved-entry" type="button" data-action="open-saved">
+        <span class="saved-entry__icon">⭐</span>
+        <span class="saved-entry__label">Saved Messages</span>
+      </button>
+
+      <div class="conn-banner" data-role="conn-banner" hidden></div>
+
+      <ul class="chat-list" data-role="chat-list"></ul>
+      <div class="empty-state" data-role="chats-empty" hidden>
+        <div class="empty-state__glyph">💬</div>
+        <p data-role="empty-text">No conversations yet.</p>
+      </div>
+
+      <!-- ➕ Create (chat / group / channel) -->
+      <div class="fab" data-role="fab">
+        <div class="fab__menu" data-role="fab-menu" hidden>
+          <button class="fab__item" type="button" data-action="create-channel">
+            <span class="fab__icon">📢</span> New channel
+          </button>
+          <button class="fab__item" type="button" data-action="create-group">
+            <span class="fab__icon">👥</span> New group
+          </button>
+          <button class="fab__item" type="button" data-action="create-direct">
+            <span class="fab__icon">💬</span> New chat
+          </button>
+        </div>
+        <button class="fab__btn" type="button" data-action="toggle-fab" aria-label="Create" title="Create">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <footer class="sidebar__me">
+        <button class="sidebar__me-open" type="button" data-action="edit-profile"
+                title="Edit your profile" aria-label="Edit your profile">
+          <div class="sidebar__me-avatar" data-role="me-avatar"></div>
+          <div class="sidebar__me-meta">
+            <span class="sidebar__me-name" data-role="me-name"></span>
+            <span class="sidebar__me-handle" data-role="me-handle"></span>
+          </div>
+        </button>
+        <button class="icon-btn" type="button" data-action="logout" title="Log out" aria-label="Log out">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 12H4m0 0l3-3m-3 3l3 3M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </footer>
+    </aside>
+
+    <!-- ================= CHAT PANE ================= -->
+    <section class="chat-pane">
+      <div class="chat-pane__empty" data-role="pane-empty">
+        <div class="app-symbol"><img src="assets/logo-symbol.svg" alt="" width="72" height="72" /></div>
+        <h2>Your messages</h2>
+        <p>Select a conversation or start a new one to begin.</p>
+      </div>
+
+      <div class="chat-view" data-role="chat-view" hidden>
+        <header class="chat-header">
+          <button class="icon-btn chat-header__back" type="button" data-action="back" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="chat-header__open" type="button" data-action="view-profile"
+                  title="View profile" aria-label="View profile">
+            <div class="chat-header__avatar" data-role="ch-avatar"></div>
+            <div class="chat-header__meta">
+              <span class="chat-header__name" data-role="ch-name"></span>
+              <span class="chat-header__status" data-role="ch-status"></span>
+            </div>
+          </button>
+
+          <div class="chat-header__actions">
+            <button class="icon-btn" type="button" data-action="call-audio"
+                    title="Audio call" aria-label="Start audio call">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4.5 5.8c3 6.4 7.3 10.7 13.7 13.7.7.3 1.5.2 2.1-.4l1.3-1.3c.6-.6.5-1.5-.1-2l-2.2-1.6c-.5-.4-1.2-.4-1.7 0l-1 .8c-2.3-1.2-4.2-3.1-5.4-5.4l.8-1c.4-.5.4-1.2 0-1.7L10.7 4.5c-.5-.6-1.4-.7-2-.1L7.4 5.7c-.6.6-.7 1.4-.4 2.1"
+                      stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="icon-btn" type="button" data-action="call-video"
+                    title="Video call" aria-label="Start video call">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="6" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.9"/>
+                <path d="M15 10.2l5-2.6v8.8l-5-2.6" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- 📌 Pinned messages bar + panel -->
+        <div class="pinned" data-role="pinned" hidden>
+          <div class="pinned-bar">
+            <button class="pinned-bar__main" type="button" data-action="jump-pin">
+              <span class="pinned-bar__icon">📌</span>
+              <span class="pinned-bar__body">
+                <span class="pinned-bar__title" data-role="pinned-title">Pinned message</span>
+                <span class="pinned-bar__text" data-role="pinned-text"></span>
+              </span>
+            </button>
+            <button class="icon-btn pinned-bar__toggle" type="button" data-action="toggle-pins"
+                    title="Show pinned" aria-label="Show pinned messages">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="pinned-panel" data-role="pinned-panel" hidden>
+            <header class="pinned-panel__head">
+              <span data-role="pinned-count">Pinned</span>
+              <button class="icon-btn" type="button" data-action="close-pins" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </header>
+            <ul class="pinned-panel__list" data-role="pinned-list"></ul>
+          </div>
+        </div>
+
+        <div class="messages__loader" data-role="msg-loader" hidden>
+          <span class="spinner"></span>
+        </div>
+        <div class="messages" data-role="messages"></div>
+
+        <div class="reply-bar" data-role="reply-bar" hidden>
+          <div class="reply-bar__body">
+            <span class="reply-bar__label" data-role="reply-label"></span>
+            <span class="reply-bar__text" data-role="reply-text"></span>
+          </div>
+          <button class="icon-btn" type="button" data-action="cancel-reply" aria-label="Cancel">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="composer-error" data-role="composer-error" hidden></div>
+
+        <div class="attach-tray" data-role="attach-tray" hidden></div>
+
+        <form class="composer" data-role="composer">
+          <input type="file" data-role="attach-input" multiple hidden />
+          <button class="icon-btn" type="button" data-action="attach"
+                  title="Attach files" aria-label="Attach files">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M21 12l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <textarea class="composer__input" data-role="composer-input" rows="1"
+                    placeholder="Message" aria-label="Message"></textarea>
+          <button class="composer__send" type="submit" data-action="send" aria-label="Send" disabled>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 12l16-8-8 16-2-6-6-2z" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ================= NEW CHAT MODAL ================= -->
+    <div class="modal" data-role="new-chat-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2>New chat</h2>
+          <button class="icon-btn" type="button" data-action="close-new-chat" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <input type="search" class="search-input" data-role="user-search"
+               placeholder="Search by username or name" aria-label="Search users" />
+        <ul class="user-results" data-role="user-results"></ul>
+        <div class="empty-state empty-state--sm" data-role="search-empty" hidden>
+          <p>No users found.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VIEW PROFILE MODAL ================= -->
+    <div class="modal" data-role="profile-modal" hidden>
+      <div class="modal__card profile-card">
+        <header class="modal__head">
+          <h2>Profile</h2>
+          <button class="icon-btn" type="button" data-action="close-profile" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <div class="profile">
+          <div class="profile__avatar profile__avatar--lg" data-role="pv-avatar"></div>
+          <h3 class="profile__name" data-role="pv-name"></h3>
+          <span class="profile__handle" data-role="pv-handle"></span>
+          <p class="profile__bio" data-role="pv-bio"></p>
+          <dl class="profile__meta">
+            <div class="profile__meta-row">
+              <dt>Joined</dt>
+              <dd data-role="pv-joined"></dd>
+            </div>
+            <div class="profile__meta-row" data-role="pv-common-row" hidden>
+              <dt>Groups in common</dt>
+              <dd data-role="pv-common"></dd>
+            </div>
+          </dl>
+          <div class="profile__actions profile__actions--split" data-role="pv-actions">
+            <button class="btn btn--primary" type="button" data-action="profile-message">Message</button>
+            <button class="btn btn--ghost" type="button" data-action="profile-call">Call</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= EDIT PROFILE MODAL ================= -->
+    <div class="modal" data-role="edit-profile-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2>Edit profile</h2>
+          <button class="icon-btn" type="button" data-action="close-edit-profile" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <form class="profile-form" data-role="edit-profile-form" novalidate>
+          <div class="profile-form__hero">
+            <button class="avatar-picker" type="button" data-action="pick-avatar"
+                    aria-label="Upload a new photo">
+              <div class="profile__avatar profile__avatar--lg" data-role="ep-avatar"></div>
+              <span class="avatar-picker__overlay">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"
+                        stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                  <circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.8"/>
+                </svg>
+                <span>Change</span>
+              </span>
+              <span class="avatar-picker__spinner" data-role="ep-avatar-spinner" hidden></span>
+            </button>
+            <input type="file" accept="image/*" data-role="ep-file" hidden />
+            <button class="avatar-picker__remove" type="button" data-action="remove-avatar"
+                    data-role="ep-remove" hidden>Remove photo</button>
+          </div>
+
+          <label class="field">
+            <span class="field__label">Display name</span>
+            <input class="field__input" type="text" data-role="ep-displayName"
+                   maxlength="50" autocomplete="name" required />
+          </label>
+
+          <label class="field">
+            <span class="field__label">Username</span>
+            <div class="field__prefixed">
+              <span class="field__prefix">@</span>
+              <input class="field__input field__input--prefixed" type="text" data-role="ep-username"
+                     maxlength="20" autocomplete="off" spellcheck="false" />
+            </div>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Avatar URL <span class="field__hint">— or paste a link</span></span>
+            <input class="field__input" type="url" data-role="ep-avatarUrl"
+                   placeholder="https://…" autocomplete="off" spellcheck="false" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">Bio</span>
+            <textarea class="field__input field__textarea" data-role="ep-bio"
+                      maxlength="280" rows="3" placeholder="A little about you"></textarea>
+            <span class="field__counter" data-role="ep-bio-count"></span>
+          </label>
+
+          <div class="composer-error" data-role="ep-error" hidden></div>
+
+          <div class="profile-form__actions">
+            <button class="btn btn--ghost" type="button" data-action="close-edit-profile">Cancel</button>
+            <button class="btn btn--primary" type="submit" data-role="ep-save">Save changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ================= SETTINGS MODAL ================= -->
+    <div class="modal" data-role="settings-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2>Settings</h2>
+          <button class="icon-btn" type="button" data-action="close-settings" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+
+        <section class="settings__section">
+          <h3 class="settings__title">Appearance</h3>
+          <span class="field__label">Theme</span>
+          <div class="segmented" data-role="theme-seg">
+            <button type="button" class="segmented__btn" data-theme-choice="light">Light</button>
+            <button type="button" class="segmented__btn" data-theme-choice="dark">Dark</button>
+            <button type="button" class="segmented__btn" data-theme-choice="system">System</button>
+          </div>
+
+          <span class="field__label">Accent color</span>
+          <div class="accents" data-role="accents"></div>
+        </section>
+
+        <section class="settings__section">
+          <h3 class="settings__title">Presence</h3>
+          <span class="field__label">Your status</span>
+          <div class="segmented segmented--wrap" data-role="presence-seg">
+            <button type="button" class="segmented__btn" data-presence-choice="online">🟢 Online</button>
+            <button type="button" class="segmented__btn" data-presence-choice="away">🌙 Away</button>
+            <button type="button" class="segmented__btn" data-presence-choice="dnd">⛔ DND</button>
+            <button type="button" class="segmented__btn" data-presence-choice="offline">⚪ Offline</button>
+          </div>
+        </section>
+
+        <button class="settings__link" type="button" data-action="open-whatsnew">🚀 What's new in RelayOne</button>
+      </div>
+    </div>
+
+    <!-- ================= WHAT'S NEW MODAL ================= -->
+    <div class="modal" data-role="whatsnew-modal" hidden>
+      <div class="modal__card modal__card--tall">
+        <header class="modal__head">
+          <h2>🚀 What's new</h2>
+          <button class="icon-btn" type="button" data-action="close-whatsnew" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <p class="whatsnew__lead">The RelayOne roadmap — what you can use today and what's on the way.</p>
+        <ul class="whatsnew__list" data-role="whatsnew-list"></ul>
+      </div>
+    </div>
+
+    <!-- ================= CREATE GROUP / CHANNEL MODAL ================= -->
+    <div class="modal" data-role="create-chat-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2 data-role="cc-title">New group</h2>
+          <button class="icon-btn" type="button" data-action="close-create-chat" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+
+        <label class="field">
+          <span class="field__label" data-role="cc-name-label">Group name</span>
+          <input class="field__input" type="text" data-role="cc-name" maxlength="120"
+                 autocomplete="off" placeholder="Name" />
+        </label>
+
+        <div class="cc-selected" data-role="cc-selected" hidden></div>
+
+        <input type="search" class="search-input" data-role="cc-search"
+               placeholder="Add people by username or name" aria-label="Add people" />
+        <ul class="user-results" data-role="cc-results"></ul>
+        <div class="empty-state empty-state--sm" data-role="cc-empty" hidden>
+          <p>No users found.</p>
+        </div>
+
+        <div class="composer-error" data-role="cc-error" hidden></div>
+
+        <div class="profile-form__actions">
+          <button class="btn btn--ghost" type="button" data-action="close-create-chat">Cancel</button>
+          <button class="btn btn--primary" type="button" data-role="cc-create">Create</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="scripts/app.js"></script>
+</body>
+</html>

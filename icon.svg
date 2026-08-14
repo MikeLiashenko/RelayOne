@@ -1,0 +1,46 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Swirl orbit symbol">
+  <defs>
+    <linearGradient id="ribbon" x1="80" y1="140" x2="432" y2="372" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5b6cff"/>
+      <stop offset="0.5" stop-color="#6d4be0"/>
+      <stop offset="1" stop-color="#4d8bff"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#6aa4ff"/>
+      <stop offset="0.6" stop-color="#5566e8"/>
+      <stop offset="1" stop-color="#4b3fc4"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g filter="url(#glow)">
+    <!-- Верхняя лента: обвивает ядро сверху-слева -->
+    <path fill="url(#ribbon)" d="
+      M 60 250
+      C 60 168 126 108 208 108
+      C 279 108 330 152 344 214
+      C 331 178 297 156 258 156
+      C 200 156 156 200 156 258
+      C 156 280 148 296 128 300
+      C 92 306 60 288 60 250 Z"/>
+
+    <!-- Нижняя лента: зеркальная, обвивает ядро снизу-справа -->
+    <path fill="url(#ribbon)" d="
+      M 452 262
+      C 452 344 386 404 304 404
+      C 233 404 182 360 168 298
+      C 181 334 215 356 254 356
+      C 312 356 356 312 356 254
+      C 356 232 364 216 384 212
+      C 420 206 452 224 452 262 Z"/>
+
+    <!-- Центральная сфера -->
+    <circle cx="256" cy="256" r="70" fill="url(#core)"/>
+  </g>
+</svg>

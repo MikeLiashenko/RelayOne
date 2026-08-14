@@ -1,0 +1,18 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="RelayOne">
+  <defs>
+    <linearGradient id="fav-tile" x1="40" y1="40" x2="472" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#168BFF"/>
+      <stop offset="1" stop-color="#713BFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- App tile: the Relay Orbit glyph in white on the brand gradient. -->
+  <rect x="32" y="32" width="448" height="448" rx="116" fill="url(#fav-tile)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round">
+    <path d="M256 136 A120 120 0 0 1 376 256"/>
+    <path d="M256 376 A120 120 0 0 1 136 256"/>
+  </g>
+  <circle cx="376" cy="256" r="20" fill="#ffffff"/>
+  <circle cx="136" cy="256" r="20" fill="#ffffff"/>
+  <circle cx="256" cy="256" r="44" fill="#ffffff"/>
+</svg>

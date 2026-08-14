@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#080B1A" />
+  <meta name="description" content="RelayOne — one place for everyone. A serious, global messaging platform." />
+  <title>RelayOne — One place for everyone</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+
+  <!-- Inter, with a robust system fallback stack in tokens.css -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+  />
+
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/components/button.css" />
+  <link rel="stylesheet" href="styles/welcome.css" />
+</head>
+<body>
+  <main class="welcome">
+    <div class="welcome__main">
+      <div class="brand">
+        <div class="brand__symbol">
+          <img src="assets/logo-symbol.svg" alt="" width="116" height="116" />
+        </div>
+
+        <div class="brand__text">
+          <h1 class="brand__wordmark">RelayOne</h1>
+          <p class="brand__tagline">One place for everyone.</p>
+        </div>
+      </div>
+
+      <div class="welcome__actions">
+        <a class="btn btn--primary" href="register.html" data-route="create-account">
+          Create account
+        </a>
+        <a class="btn btn--secondary" href="login.html" data-route="login">
+          Log in
+        </a>
+      </div>
+    </div>
+
+    <footer class="welcome__legal">
+      By continuing, you agree to the
+      <a href="#/terms">Terms of Service</a> and
+      <a href="#/privacy">Privacy Policy</a>.
+    </footer>
+  </main>
+
+  <script type="module" src="scripts/guard-guest.js"></script>
+  <script type="module" src="scripts/main.js"></script>
+</body>
+</html>

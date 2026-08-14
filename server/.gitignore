@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+
+# Never commit real secrets / local DB credentials.
+.env
+.env.local
+.env.*.local
+
+# Local object storage + runtime data.
+var/
+
+# PGlite test data
+.pglite/

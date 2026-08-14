@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#080B1A" />
+  <meta name="description" content="Create your RelayOne account." />
+  <title>Create your account — RelayOne</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+  />
+
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/components/button.css" />
+  <link rel="stylesheet" href="styles/components/field.css" />
+  <link rel="stylesheet" href="styles/auth.css" />
+</head>
+<body>
+  <main class="auth">
+    <section class="auth-card" data-active-step="1" aria-live="polite">
+      <header class="auth-card__bar">
+        <button class="auth-back" type="button" data-action="back" aria-label="Go back">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <ol class="stepper" aria-hidden="true">
+          <li class="stepper__dot is-active" data-dot="1"></li>
+          <li class="stepper__dot" data-dot="2"></li>
+          <li class="stepper__dot" data-dot="3"></li>
+        </ol>
+      </header>
+
+      <div class="auth-steps">
+
+        <!-- ============================ STEP 1 =========================== -->
+        <section class="step step--active" data-step="identify">
+          <div class="step__symbol">
+            <img src="assets/logo-symbol.svg" alt="" width="68" height="68" />
+          </div>
+          <div class="step__head" style="margin-top: var(--space-4)">
+            <h1 class="step__title" tabindex="-1">Create your RelayOne account</h1>
+            <p class="step__subtitle">Connect with people and start messaging.</p>
+          </div>
+
+          <form class="step__form" data-form="identify" novalidate>
+            <div class="segmented" data-active="phone" role="tablist"
+                 aria-label="Choose how to sign up">
+              <button class="segmented__option" type="button" role="tab"
+                      aria-selected="true" data-channel="phone">Phone</button>
+              <button class="segmented__option" type="button" role="tab"
+                      aria-selected="false" data-channel="email">Email</button>
+              <span class="segmented__thumb" aria-hidden="true"></span>
+            </div>
+
+            <div class="field" data-field="identifier">
+              <label class="field__label" for="identifier">Phone number</label>
+              <div class="field__control">
+                <input class="field__input" id="identifier" name="identifier"
+                       type="tel" inputmode="tel" autocomplete="tel"
+                       placeholder="Phone number" aria-describedby="identifier-msg" />
+              </div>
+              <p class="field__message" id="identifier-msg" data-role="message"
+                 data-tone="error" role="alert" hidden></p>
+            </div>
+
+            <button class="btn btn--primary" type="submit"
+                    data-action="submit-identify" disabled>Continue</button>
+          </form>
+
+          <p class="step__alt">
+            Already have an account? <a href="login.html">Log in</a>
+          </p>
+        </section>
+
+        <!-- ============================ STEP 2 =========================== -->
+        <section class="step" data-step="verify" hidden>
+          <div class="step__head">
+            <h1 class="step__title" tabindex="-1">Verify your account</h1>
+            <p class="step__subtitle">
+              Enter the 6-digit code we sent to
+              <strong data-role="destination">your account</strong>.
+            </p>
+          </div>
+
+          <form class="step__form" data-form="verify" novalidate>
+            <div class="otp" data-role="otp"></div>
+            <p class="field__message" data-role="verify-message" data-tone="error"
+               role="alert" hidden></p>
+
+            <button class="btn btn--primary" type="submit"
+                    data-action="submit-verify" disabled>Verify</button>
+
+            <p class="resend">
+              <span data-role="resend-label">Didn’t get it?</span>
+              <button class="resend__btn" type="button" data-action="resend"
+                      disabled>Resend code</button>
+            </p>
+
+            <!-- Dev-only: shown only while the backend returns a devCode (no
+                 SMS/email provider connected). Never appears in production. -->
+            <button class="dev-hint" type="button" data-role="dev-hint" hidden>
+              <span class="dev-hint__tag">DEV</span>
+              <span>No email provider yet — tap to fill code
+                <strong data-role="dev-hint-code"></strong></span>
+            </button>
+          </form>
+        </section>
+
+        <!-- ============================ STEP 3 =========================== -->
+        <section class="step" data-step="profile" hidden>
+          <div class="step__head">
+            <h1 class="step__title" tabindex="-1">Create your profile</h1>
+            <p class="step__subtitle">Add a name and a username so people can find you.</p>
+          </div>
+
+          <form class="step__form" data-form="profile" novalidate>
+            <div class="avatar" data-role="avatar">
+              <button class="avatar__button" type="button" data-action="pick-avatar"
+                      aria-label="Add a profile photo">
+                <span class="avatar__placeholder">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2"
+                          stroke-linecap="round"/>
+                  </svg>
+                  <span class="avatar__label">Add photo</span>
+                </span>
+                <img class="avatar__image" data-role="avatar-image" alt="" />
+                <span class="avatar__edit" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"
+                          stroke="currentColor" stroke-width="2"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <input type="file" accept="image/*" data-role="avatar-input" hidden />
+            </div>
+
+            <div class="field" data-field="displayName">
+              <label class="field__label" for="displayName">Display name</label>
+              <div class="field__control">
+                <input class="field__input" id="displayName" name="displayName"
+                       type="text" autocomplete="name" maxlength="50"
+                       placeholder="Your name" />
+              </div>
+              <p class="field__message" data-role="message" data-tone="error" hidden></p>
+            </div>
+
+            <div class="field" data-field="username">
+              <label class="field__label" for="username">Username</label>
+              <div class="field__control">
+                <span class="field__adornment" aria-hidden="true">@</span>
+                <input class="field__input" id="username" name="username"
+                       type="text" autocomplete="username" spellcheck="false"
+                       autocapitalize="none" maxlength="20"
+                       placeholder="username" aria-describedby="username-msg" />
+                <span class="field__status" data-role="username-status"></span>
+              </div>
+              <p class="field__message" id="username-msg" data-role="message"
+                 data-tone="muted" role="status">
+                3–20 characters — letters, numbers or underscores.
+              </p>
+            </div>
+
+            <button class="btn btn--primary" type="submit"
+                    data-action="submit-profile" disabled>Continue</button>
+          </form>
+        </section>
+
+        <!-- ============================ STEP 4 =========================== -->
+        <section class="step" data-step="ready" hidden>
+          <div class="success-symbol">
+            <img src="assets/logo-symbol.svg" alt="" width="88" height="88" />
+          </div>
+          <div class="step__head">
+            <h1 class="step__title" tabindex="-1">You’re ready.</h1>
+            <p class="step__subtitle">Welcome to RelayOne.</p>
+          </div>
+
+          <div class="profile-preview" data-role="preview">
+            <div class="profile-preview__avatar" data-role="preview-avatar"></div>
+            <div class="profile-preview__meta">
+              <span class="profile-preview__name" data-role="preview-name"></span>
+              <span class="profile-preview__handle" data-role="preview-handle"></span>
+            </div>
+          </div>
+
+          <div class="step__form" style="margin-top: var(--space-6)">
+            <a class="btn btn--primary" href="app.html" data-action="open-app">Open RelayOne</a>
+          </div>
+        </section>
+
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="scripts/guard-guest.js"></script>
+  <script type="module" src="scripts/register.js"></script>
+</body>
+</html>
