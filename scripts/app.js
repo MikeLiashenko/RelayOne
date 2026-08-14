@@ -472,16 +472,7 @@ function messageNode(m) {
   // Attachments (display-only for now).
   if (!deleted && m.attachments?.length) {
     const wrap = el("div", { class: "msg__attachments" });
-    for (const a of m.attachments) {
-      if (a.kind === "image") {
-        wrap.append(el("img", { class: "msg__image", src: a.url, alt: a.fileName || "image", loading: "lazy" }));
-      } else {
-        wrap.append(
-          el("a", { class: "msg__file", href: a.url, target: "_blank", rel: "noopener" },
-            "📎 ", a.fileName || a.kind)
-        );
-      }
-    }
+    for (const a of m.attachments) wrap.append(attachmentNode(a));
     bubbleChildren.push(wrap);
   }
 
@@ -672,11 +663,48 @@ function wireComposer() {
     submitComposer();
   });
 
-  // File attachments.
+  // File attachments: button, paste, and drag-and-drop.
   $('[data-action="attach"]').addEventListener("click", () => $('[data-role="attach-input"]').click());
   $('[data-role="attach-input"]').addEventListener("change", onComposerFilesChosen);
+  input.addEventListener("paste", (e) => {
+    const files = [...(e.clipboardData?.files || [])];
+    if (files.length) {
+      e.preventDefault();
+      addFilesToComposer(files);
+    }
+  });
+  wireDragAndDrop();
 
   $('[data-action="cancel-reply"]').addEventListener("click", cancelReplyOrEdit);
+}
+
+/** Drop files anywhere on the open chat to attach them. */
+function wireDragAndDrop() {
+  const zone = $('[data-role="chat-view"]');
+  const overlay = $('[data-role="drop-overlay"]');
+  let depth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+
+  zone.addEventListener("dragenter", (e) => {
+    if (!hasFiles(e) || !state.activeId) return;
+    e.preventDefault();
+    depth++;
+    overlay.hidden = false;
+  });
+  zone.addEventListener("dragover", (e) => {
+    if (hasFiles(e) && state.activeId) e.preventDefault();
+  });
+  zone.addEventListener("dragleave", () => {
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) overlay.hidden = true;
+  });
+  zone.addEventListener("drop", (e) => {
+    depth = 0;
+    overlay.hidden = true;
+    if (!hasFiles(e) || !state.activeId) return;
+    e.preventDefault();
+    addFilesToComposer([...(e.dataTransfer.files || [])]);
+  });
 }
 
 /* -- Composer attachments -------------------------------------------------- */
@@ -711,12 +739,19 @@ async function uploadAttachment(file) {
 async function onComposerFilesChosen(e) {
   const files = [...(e.target.files || [])];
   e.target.value = ""; // allow re-picking the same file
-  for (const file of files) {
+  await addFilesToComposer(files);
+}
+
+/** Validate + upload a batch of files into the composer tray (button/paste/drop). */
+async function addFilesToComposer(files) {
+  if (!state.activeId) return;
+  for (const file of [...files]) {
+    if (!file) continue;
     if (file.size > ATTACH_MAX_BYTES) {
       flashComposerError(`“${file.name}” is too large (max 25 MB).`);
       continue;
     }
-    const placeholder = { id: null, fileName: file.name, kind: attachmentKind(file.type || ""), uploading: true };
+    const placeholder = { id: null, fileName: file.name, sizeBytes: file.size, kind: attachmentKind(file.type || ""), uploading: true };
     state.pendingAttachments.push(placeholder);
     renderAttachTray();
     try {
@@ -742,7 +777,11 @@ function renderAttachTray() {
     } else {
       chip.append(el("span", { class: "attach-chip__icon" }, a.kind === "video" ? "🎬" : a.kind === "voice" ? "🎵" : "📄"));
     }
-    chip.append(el("span", { class: "attach-chip__name" }, a.fileName || "file"));
+    chip.append(
+      el("span", { class: "attach-chip__meta" },
+        el("span", { class: "attach-chip__name" }, a.fileName || "file"),
+        el("span", { class: "attach-chip__size" }, humanSize(a.sizeBytes)))
+    );
     if (a.uploading) {
       chip.append(el("span", { class: "attach-chip__spin" }));
     } else {
@@ -1876,6 +1915,64 @@ function hostnameOf(url) {
   } catch {
     return url;
   }
+}
+
+/* -- Attachment rendering -------------------------------------------------- */
+
+function humanSize(n) {
+  if (typeof n !== "number") return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${v >= 10 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
+
+function fileGlyph(a) {
+  const name = (a.fileName || "").toLowerCase();
+  const mt = a.mimeType || "";
+  if (mt.includes("pdf") || name.endsWith(".pdf")) return "📕";
+  if (/\.(zip|rar|7z|tar|gz)$/.test(name)) return "🗜️";
+  if (/\.(docx?|odt|rtf)$/.test(name)) return "📘";
+  if (/\.(xlsx?|csv|ods)$/.test(name)) return "📊";
+  if (/\.(html?|css|js|ts|json|xml|md|txt)$/.test(name) || mt.startsWith("text/")) return "📄";
+  return "📎";
+}
+
+function attachmentNode(a) {
+  if (a.kind === "image") {
+    return el(
+      "a",
+      { class: "msg__image-link", href: a.url, target: "_blank", rel: "noopener", onClick: (e) => e.stopPropagation() },
+      el("img", { class: "msg__image", src: a.url, alt: a.fileName || "image", loading: "lazy" })
+    );
+  }
+  if (a.kind === "video") {
+    return el("video", { class: "msg__video", src: a.url, controls: true, preload: "metadata" });
+  }
+  if (a.kind === "voice") {
+    return el("audio", { class: "msg__audio", src: a.url, controls: true, preload: "metadata" });
+  }
+  // Documents & everything else → a proper file card (download on click).
+  return el(
+    "a",
+    {
+      class: "msg__file",
+      href: a.url,
+      target: "_blank",
+      rel: "noopener",
+      download: a.fileName || "",
+      onClick: (e) => e.stopPropagation(),
+    },
+    el("span", { class: "msg__file-icon" }, fileGlyph(a)),
+    el(
+      "span",
+      { class: "msg__file-meta" },
+      el("span", { class: "msg__file-name" }, a.fileName || a.kind),
+      el("span", { class: "msg__file-size" }, humanSize(a.sizeBytes))
+    ),
+    el("span", { class: "msg__file-dl" }, "⭳")
+  );
 }
 
 function onNewMessage(message) {
