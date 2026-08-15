@@ -81,6 +81,7 @@ const DRAFTS_KEY = "relayone.drafts";
     send: (obj) => rt.send(obj),
     getMe: () => state.me,
     resolveUser,
+    resolveChat,
     getIceServers: () => api.getIceServers(),
   });
   window.addEventListener("beforeunload", () => {
@@ -151,6 +152,8 @@ function wireStaticUI() {
 
   $('[data-action="call-audio"]').addEventListener("click", () => startCall("audio"));
   $('[data-action="call-video"]').addEventListener("click", () => startCall("video"));
+  $('[data-action="call-group-audio"]').addEventListener("click", () => startGroupCall("audio"));
+  $('[data-action="call-group-video"]').addEventListener("click", () => startGroupCall("video"));
 
   $('[data-action="open-saved"]').addEventListener("click", openSaved);
   $('[data-action="jump-pin"]').addEventListener("click", jumpNextPin);
@@ -581,7 +584,13 @@ function renderHeader() {
   $('[data-role="ch-name"]').textContent = name;
   // Calls are 1:1 in this version — offered on direct chats only.
   const actions = $(".chat-header__actions");
-  if (actions) actions.hidden = chat.type !== "direct";
+  if (actions) {
+    const isDirect = chat.type === "direct";
+    const isGroupy = chat.type === "group" || chat.type === "channel";
+    actions.hidden = !(isDirect || isGroupy);
+    $$('[data-call-kind="direct"]', actions).forEach((b) => (b.hidden = !isDirect));
+    $$('[data-call-kind="group"]', actions).forEach((b) => (b.hidden = !isGroupy));
+  }
   renderHeaderStatus();
 }
 
@@ -1489,6 +1498,22 @@ function startCall(media) {
   if (!peer || !calls) return;
   if (calls.isBusy()) return; // one call at a time in this version
   calls.start(peer, media);
+}
+
+/** Title for a chat id, used by the calls layer to label group calls. */
+function resolveChat(chatId) {
+  const chat =
+    state.chats.find((c) => c.id === chatId) ||
+    (state.activeChat?.id === chatId ? state.activeChat : null);
+  return { title: chat ? chatDisplay(chat).name : "Group call" };
+}
+
+function startGroupCall(media) {
+  const chat = state.activeChat;
+  if (!chat || !calls) return;
+  if (chat.type !== "group" && chat.type !== "channel") return;
+  if (calls.isBusy()) return; // one call at a time in this version
+  calls.startGroup({ chatId: chat.id, title: chatDisplay(chat).name, media });
 }
 
 /* -- Features: banner, settings, what's new, presence ---------------------- */

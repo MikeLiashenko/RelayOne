@@ -61,7 +61,12 @@ export type ServerEvent =
   | { type: "call.busy"; callId: string; fromUserId: string }
   | { type: "call.unavailable"; callId: string; fromUserId: string }
   | { type: "call.end"; callId: string; fromUserId: string; reason?: string }
-  | { type: "call.signal"; callId: string; fromUserId: string; signal: CallSignal };
+  | { type: "call.signal"; callId: string; fromUserId: string; signal: CallSignal }
+  /* -- Group calls (mesh) -- */
+  | { type: "call.group-invite"; callId: string; chatId: string; fromUserId: string; media: CallMedia }
+  | { type: "call.group-roster"; callId: string; chatId: string; media: CallMedia; peers: string[] }
+  | { type: "call.group-peer-joined"; callId: string; userId: string }
+  | { type: "call.group-peer-left"; callId: string; userId: string };
 
 /* Client → server. */
 export type ClientEvent =
@@ -75,7 +80,11 @@ export type ClientEvent =
   | { type: "call.cancel"; callId: string; toUserId: string }
   | { type: "call.busy"; callId: string; toUserId: string }
   | { type: "call.end"; callId: string; toUserId: string }
-  | { type: "call.signal"; callId: string; toUserId: string; signal: CallSignal };
+  | { type: "call.signal"; callId: string; toUserId: string; signal: CallSignal }
+  /* -- Group calls (mesh) -- */
+  | { type: "call.group-start"; callId: string; chatId: string; media: CallMedia }
+  | { type: "call.group-join"; callId: string }
+  | { type: "call.group-leave"; callId: string };
 
 /** The subset of client events handled by the calls signaling module. */
 export type CallClientEvent = Extract<ClientEvent, { type: `call.${string}` }>;

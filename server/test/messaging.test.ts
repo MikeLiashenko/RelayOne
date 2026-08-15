@@ -236,3 +236,64 @@ describe("realtime — two clients", () => {
     wsB.close();
   });
 });
+
+describe("group calls — signaling", () => {
+  it("invites members, builds the mesh roster, targets signals, and handles leave", async () => {
+    const a = await registerUser(app, { email: "gc_a@relayone.test", username: "gc_a" });
+    const b = await registerUser(app, { email: "gc_b@relayone.test", username: "gc_b" });
+    const c = await registerUser(app, { email: "gc_c@relayone.test", username: "gc_c" });
+
+    const group = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "group", title: "Squad", memberIds: [b.user.id, c.user.id] });
+    const chatId = group.body.data.id;
+
+    const wsA = connect(a.token);
+    const wsB = connect(b.token);
+    const wsC = connect(c.token);
+    await Promise.all([
+      wsA.waitFor((e) => e.type === "ready"),
+      wsB.waitFor((e) => e.type === "ready"),
+      wsC.waitFor((e) => e.type === "ready"),
+    ]);
+
+    const callId = "test-call-1";
+
+    // A starts → B and C are invited.
+    wsA.send({ type: "call.group-start", callId, chatId, media: "video" });
+    const inviteB = await wsB.waitFor((e) => e.type === "call.group-invite");
+    const inviteC = await wsC.waitFor((e) => e.type === "call.group-invite");
+    expect(inviteB.fromUserId).toBe(a.user.id);
+    expect(inviteC.callId).toBe(callId);
+
+    // B joins → B gets a roster of [A]; A is told B joined.
+    wsB.send({ type: "call.group-join", callId });
+    const rosterB = await wsB.waitFor((e) => e.type === "call.group-roster");
+    expect(rosterB.peers).toEqual([a.user.id]);
+    const aSawB = await wsA.waitFor((e) => e.type === "call.group-peer-joined");
+    expect(aSawB.userId).toBe(b.user.id);
+
+    // C joins → C's roster is [A, B]; both A and B are told C joined.
+    wsC.send({ type: "call.group-join", callId });
+    const rosterC = await wsC.waitFor((e) => e.type === "call.group-roster");
+    expect(rosterC.peers).toEqual([a.user.id, b.user.id]);
+    await wsA.waitFor((e) => e.type === "call.group-peer-joined" && e.userId === c.user.id);
+    await wsB.waitFor((e) => e.type === "call.group-peer-joined" && e.userId === c.user.id);
+
+    // A signals B specifically (offer) → B receives it, addressed from A.
+    wsA.send({ type: "call.signal", callId, toUserId: b.user.id, signal: { kind: "offer", description: { type: "offer", sdp: "x" } } });
+    const sigB = await wsB.waitFor((e) => e.type === "call.signal" && e.fromUserId === a.user.id);
+    expect(sigB.signal.kind).toBe("offer");
+
+    // B leaves → A and C are notified.
+    wsB.send({ type: "call.group-leave", callId });
+    const leftA = await wsA.waitFor((e) => e.type === "call.group-peer-left" && e.userId === b.user.id);
+    expect(leftA.userId).toBe(b.user.id);
+    await wsC.waitFor((e) => e.type === "call.group-peer-left" && e.userId === b.user.id);
+
+    wsA.close();
+    wsB.close();
+    wsC.close();
+  });
+});

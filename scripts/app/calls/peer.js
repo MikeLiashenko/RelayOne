@@ -6,7 +6,13 @@
  * remote description, and exposes the offer/answer helpers the engine needs.
  * Keeping this isolated makes room for multiple peers (group calls) later.
  */
-export function createPeer({ iceServers, onIceCandidate, onRemoteStream, onConnectionState }) {
+export function createPeer({
+  iceServers,
+  onIceCandidate,
+  onRemoteStream,
+  onConnectionState,
+  stopTracksOnClose = true,
+}) {
   const pc = new RTCPeerConnection({ iceServers });
   const remoteStream = new MediaStream();
   const pendingCandidates = [];
@@ -80,10 +86,15 @@ export function createPeer({ iceServers, onIceCandidate, onRemoteStream, onConne
   }
 
   function close() {
-    try {
-      pc.getSenders().forEach((s) => s.track && s.track.stop && s.track.stop());
-    } catch {
-      /* ignore */
+    // In a mesh call the local tracks are shared across many peers, so closing
+    // one connection must not stop them (that would kill your camera/mic for
+    // everyone). 1:1 calls own their tracks and stop them here.
+    if (stopTracksOnClose) {
+      try {
+        pc.getSenders().forEach((s) => s.track && s.track.stop && s.track.stop());
+      } catch {
+        /* ignore */
+      }
     }
     try {
       pc.close();

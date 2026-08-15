@@ -103,6 +103,9 @@ async function handleClientEvent(
     case "call.busy":
     case "call.end":
     case "call.signal":
+    case "call.group-start":
+    case "call.group-join":
+    case "call.group-leave":
       await handleCallEvent(userId, event);
       return;
 
