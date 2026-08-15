@@ -8,6 +8,7 @@ import { getSession, logout, requireAuth, setSession } from "./auth/session.js";
 import { api } from "./app/api.js";
 import { createRealtime } from "./app/realtime.js";
 import { createCalls } from "./app/calls/index.js";
+import { createViewer } from "./app/viewer.js";
 import { ACCENTS, getAccent, getThemePref, initTheme, setAccent, setTheme } from "./app/features/theme.js";
 import { createFolders } from "./app/features/folders.js";
 import { ROADMAP } from "./app/features/roadmap.js";
@@ -54,6 +55,7 @@ const linkCache = new Map(); // url -> preview | null
 let rt = null;
 let calls = null;
 let folders = null;
+const viewer = createViewer();
 let typingSentAt = 0;
 
 const DRAFTS_KEY = "relayone.drafts";
@@ -2170,11 +2172,38 @@ function fileGlyph(a) {
   return "📎";
 }
 
+/** All image attachments in the loaded messages, in order — the lightbox gallery. */
+function collectImageGallery() {
+  const imgs = [];
+  for (const m of state.messages) {
+    if (m.deletedAt) continue;
+    for (const att of m.attachments || []) {
+      if (att.kind === "image" && att.url) imgs.push(att);
+    }
+  }
+  return imgs;
+}
+
+function openImageViewer(a) {
+  const gallery = collectImageGallery();
+  const idx = gallery.findIndex((x) => (x.id && a.id && x.id === a.id) || x.url === a.url);
+  viewer.openImages(gallery.length ? gallery : [a], idx >= 0 ? idx : 0);
+}
+
 function attachmentNode(a) {
   if (a.kind === "image") {
     return el(
       "a",
-      { class: "msg__image-link", href: a.url, target: "_blank", rel: "noopener", onClick: (e) => e.stopPropagation() },
+      {
+        class: "msg__image-link",
+        href: a.url,
+        rel: "noopener",
+        onClick: (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openImageViewer(a);
+        },
+      },
       el("img", { class: "msg__image", src: a.url, alt: a.fileName || "image", loading: "lazy" })
     );
   }
@@ -2184,16 +2213,18 @@ function attachmentNode(a) {
   if (a.kind === "voice") {
     return el("audio", { class: "msg__audio", src: a.url, controls: true, preload: "metadata" });
   }
-  // Documents & everything else → a proper file card (download on click).
+  // Documents & everything else → a file card that opens an in-app preview.
   return el(
     "a",
     {
       class: "msg__file",
       href: a.url,
-      target: "_blank",
       rel: "noopener",
-      download: a.fileName || "",
-      onClick: (e) => e.stopPropagation(),
+      onClick: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        viewer.openFile(a);
+      },
     },
     el("span", { class: "msg__file-icon" }, fileGlyph(a)),
     el(
