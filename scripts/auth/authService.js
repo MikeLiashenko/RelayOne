@@ -9,7 +9,7 @@
  * surfaced via the `relayone:devcode` event (and the on-screen dev chip).
  */
 
-import { apiFetch, setSession, IS_DEV } from "./session.js";
+import { apiFetch, setSession, getSession, IS_DEV } from "./session.js";
 
 /** In-flight verification/registration state. */
 const flow = { verificationId: null, registrationTicket: null };
@@ -137,8 +137,65 @@ export const authService = {
       return { ok: false, message: r.error?.message ?? "Couldn’t create your profile." };
     }
     setSession(r.data); // AuthSession: { token, expiresAt, user }
+
+    // If a photo was chosen during sign-up, upload it now — the session token
+    // (required by the upload endpoint) only exists once the account is created.
+    // Best-effort: a failed avatar upload must never fail account creation; the
+    // user can always set it later in Settings.
+    if (profile.avatarFile) {
+      try {
+        const url = await uploadAvatarFile(profile.avatarFile);
+        const patched = await apiFetch("/users/me", {
+          method: "PATCH",
+          body: { avatarUrl: url },
+        });
+        if (patched.ok) {
+          const s = getSession();
+          if (s) {
+            s.user = patched.data;
+            setSession(s);
+          }
+        }
+      } catch (err) {
+        if (IS_DEV) console.warn("[RelayOne] avatar upload during sign-up failed", err);
+      }
+    }
+
     return { ok: true, profile };
   },
 };
+
+/**
+ * Two-step upload used during sign-up: register the attachment, PUT the bytes
+ * to the returned target, then resolve to its public URL (for `avatarUrl`).
+ * Mirrors the app's profile-editor upload so behaviour is identical.
+ */
+async function uploadAvatarFile(file) {
+  const created = await apiFetch("/attachments", {
+    method: "POST",
+    body: {
+      kind: "image",
+      mimeType: file.type,
+      sizeBytes: file.size,
+      fileName: file.name,
+    },
+  });
+  if (!created.ok) {
+    throw new Error(created.error?.message ?? "Couldn’t start the avatar upload.");
+  }
+
+  const { attachment, upload } = created.data;
+  const token = getSession()?.token;
+  const res = await fetch(upload.uploadUrl, {
+    method: upload.method || "PUT",
+    headers: {
+      ...(upload.headers || {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error("Avatar upload failed.");
+  return attachment.url;
+}
 
 export default authService;

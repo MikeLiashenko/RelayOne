@@ -73,7 +73,8 @@ const state = {
   displayName: "",
   username: "",
   usernameStatus: "empty", // empty | invalid | checking | available | taken
-  avatarUrl: null,
+  avatarUrl: null, // object URL, for local preview only
+  avatarFile: null, // the actual File, uploaded after the account is created
 };
 
 /* ========================================================================== */
@@ -412,11 +413,22 @@ const avatarImage = $('[data-role="avatar-image"]');
 
 /* --- Avatar --- */
 avatarButton.addEventListener("click", () => avatarInput.click());
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 avatarInput.addEventListener("change", () => {
   const file = avatarInput.files && avatarInput.files[0];
+  avatarInput.value = ""; // allow re-picking the same file later
   if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    window.alert("Please choose an image file.");
+    return;
+  }
+  if (file.size > AVATAR_MAX_BYTES) {
+    window.alert("Image is too large — pick one under 5 MB.");
+    return;
+  }
   if (state.avatarUrl) URL.revokeObjectURL(state.avatarUrl);
   state.avatarUrl = URL.createObjectURL(file);
+  state.avatarFile = file;
   avatarImage.src = state.avatarUrl;
   avatarWrap.classList.add("has-image");
 });
@@ -504,7 +516,7 @@ profileForm.addEventListener("submit", async (event) => {
     channel: state.channel,
     displayName: state.displayName.trim(),
     username: state.username,
-    avatarUrl: state.avatarUrl,
+    avatarFile: state.avatarFile,
   });
   setLoading(profileSubmit, false);
 

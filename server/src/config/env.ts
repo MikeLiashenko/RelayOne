@@ -23,7 +23,20 @@ const schema = z.object({
 
   STORAGE_PROVIDER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default("./var/uploads"),
-  STORAGE_PUBLIC_BASE_URL: z.string().default("http://localhost:4000/uploads"),
+  // Public base for uploaded files. If unset, derive it from the platform's
+  // external URL (Render injects RENDER_EXTERNAL_URL automatically) so avatars
+  // and attachments get a reachable https:// address without extra config.
+  // Falls back to the local dev server otherwise.
+  STORAGE_PUBLIC_BASE_URL: z
+    .string()
+    .optional()
+    .transform(
+      (v) =>
+        (v && v.trim()) ||
+        (process.env.RENDER_EXTERNAL_URL
+          ? `${process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, "")}/uploads`
+          : "http://localhost:4000/uploads")
+    ),
 
   // RelayOne Calls — WebRTC ICE configuration. STUN is enough for local dev;
   // add a TURN server (comma-separated URLs + credentials) for NAT traversal
