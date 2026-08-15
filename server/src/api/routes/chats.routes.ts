@@ -3,10 +3,12 @@ import { z } from "zod";
 import { getAuth, requireAuth } from "../../auth/middleware";
 import { chatService } from "../../services/chatService";
 import { messageService } from "../../services/messageService";
+import { pollService } from "../../services/pollService";
 import { hub } from "../../realtime/hub";
 import { parse } from "../../validation/parse";
 import {
   createChatSchema,
+  createPollSchema,
   listMessagesSchema,
   sendMessageSchema,
 } from "../../validation/schemas";
@@ -38,6 +40,17 @@ chatsRouter.get(
     const id = parse(idParam, req.params.id);
     const { type } = parse(sharedQuery, req.query);
     sendData(res, await messageService.listShared(id, user.id, type));
+  })
+);
+
+/** Create a poll (or quiz poll) in a chat. */
+chatsRouter.post(
+  "/:id/polls",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const input = parse(createPollSchema, req.body);
+    sendData(res, await pollService.createPoll(id, user.id, input), 201);
   })
 );
 

@@ -19,6 +19,8 @@ export const ROADMAP = [
   { icon: "📎", title: "Shared media", status: "live", desc: "Per-chat Media / Files / Links / Voice tabs." },
   { icon: "🔗", title: "Message links", status: "live", desc: "Copy a link to any message that jumps straight to it." },
   { icon: "✨", title: "Message effects", status: "live", desc: "Confetti, hearts, fire and stars on reactions." },
+  { icon: "📊", title: "Polls", status: "live", desc: "Single or multiple choice, anonymous, closeable, live results." },
+  { icon: "🗳️", title: "Quiz polls", status: "live", desc: "Mark a correct answer; voters see if they got it right." },
   { icon: "🔎", title: "Global search", status: "live", desc: "Search people, chats and message text at once." },
   { icon: "🔔", title: "Push notifications", status: "live", desc: "Get notified for new messages even when RelayOne is closed." },
   { icon: "📊", title: "Storage manager", status: "live", desc: "See local cache usage by type and clear it." },

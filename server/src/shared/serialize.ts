@@ -4,6 +4,9 @@ import type {
   Message,
   MessageReaction,
   Notification,
+  Poll,
+  PollOption,
+  PollVote,
   User,
 } from "../db/schema";
 import { env } from "../config/env";
@@ -12,6 +15,7 @@ import type {
   PublicChat,
   PublicMessage,
   PublicNotification,
+  PublicPoll,
   PublicReaction,
   PublicUser,
   SelfUser,
@@ -59,6 +63,52 @@ export function canSeeAvatar(owner: User, viewerId: string | undefined, isContac
   if (p === "nobody") return false;
   if (p === "contacts") return isContact;
   return true;
+}
+
+/**
+ * Serialize a poll for a specific viewer. Vote counts are always public; who
+ * voted is revealed only for non-anonymous polls; the quiz answer is revealed
+ * only once the viewer has voted or the poll is closed.
+ */
+export function toPublicPoll(
+  poll: Poll,
+  options: PollOption[],
+  votes: PollVote[],
+  viewerId?: string
+): PublicPoll {
+  const opts = options
+    .filter((o) => o.pollId === poll.id)
+    .sort((a, b) => a.position - b.position);
+  const pollVotesList = votes.filter((v) => v.pollId === poll.id);
+
+  const votersByOption = new Map<string, string[]>();
+  for (const v of pollVotesList) {
+    const arr = votersByOption.get(v.optionId) ?? [];
+    arr.push(v.userId);
+    votersByOption.set(v.optionId, arr);
+  }
+  const voterSet = new Set(pollVotesList.map((v) => v.userId));
+  const myVotes = pollVotesList.filter((v) => v.userId === viewerId).map((v) => v.optionId);
+  const closed = poll.closedAt != null;
+  const revealQuiz = poll.isQuiz && (myVotes.length > 0 || closed);
+
+  return {
+    id: poll.id,
+    question: poll.question,
+    allowsMultiple: poll.allowsMultiple,
+    anonymous: poll.anonymous,
+    isQuiz: poll.isQuiz,
+    closed,
+    totalVoters: voterSet.size,
+    myVotes,
+    options: opts.map((o) => ({
+      id: o.id,
+      text: o.text,
+      votes: votersByOption.get(o.id)?.length ?? 0,
+      ...(revealQuiz ? { correct: o.id === poll.correctOptionId } : {}),
+      ...(poll.anonymous ? {} : { voters: votersByOption.get(o.id) ?? [] }),
+    })),
+  };
 }
 
 export function toPublicChat(chat: Chat, members: User[], viewerId?: string): PublicChat {
@@ -120,6 +170,7 @@ export function toPublicMessage(
         }
       : null,
     replyCount,
+    poll: null,
     attachments: m.deletedAt ? [] : attachments.map(toPublicAttachment),
     reactions: reactions.map(toPublicReaction),
   };

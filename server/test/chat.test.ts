@@ -241,6 +241,101 @@ describe("chats, messages & authorization", () => {
     expect(thread.body.data.replies[0].content).toBe("reply one");
   });
 
+  it("runs a poll: create, vote, replace vote, and see results", async () => {
+    const a = await registerUser(app, { email: "pl_a@relayone.test", username: "poll_a" });
+    const b = await registerUser(app, { email: "pl_b@relayone.test", username: "poll_b" });
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    const created = await request(app)
+      .post(`/api/chats/${chatId}/polls`)
+      .set(bearer(a.token))
+      .send({ question: "Where to?", options: ["Beach", "Mountains", "City"] });
+    expect(created.status).toBe(201);
+    const poll = created.body.data.poll;
+    expect(poll.options).toHaveLength(3);
+    expect(poll.totalVoters).toBe(0);
+    const beach = poll.options.find((o: any) => o.text === "Beach").id;
+    const mountains = poll.options.find((o: any) => o.text === "Mountains").id;
+
+    // B votes Beach.
+    const v1 = await request(app)
+      .post(`/api/polls/${poll.id}/vote`)
+      .set(bearer(b.token))
+      .send({ optionIds: [beach] });
+    expect(v1.status).toBe(200);
+    expect(v1.body.data.totalVoters).toBe(1);
+    expect(v1.body.data.myVotes).toEqual([beach]);
+    expect(v1.body.data.options.find((o: any) => o.id === beach).votes).toBe(1);
+
+    // B changes to Mountains — single choice replaces the prior vote.
+    const v2 = await request(app)
+      .post(`/api/polls/${poll.id}/vote`)
+      .set(bearer(b.token))
+      .send({ optionIds: [mountains] });
+    expect(v2.body.data.options.find((o: any) => o.id === beach).votes).toBe(0);
+    expect(v2.body.data.options.find((o: any) => o.id === mountains).votes).toBe(1);
+    expect(v2.body.data.totalVoters).toBe(1);
+
+    // A (author, hasn't voted) sees results but not their own vote.
+    const list = await request(app).get(`/api/chats/${chatId}/messages`).set(bearer(a.token));
+    const seen = list.body.data.find((m: any) => m.poll?.id === poll.id).poll;
+    expect(seen.totalVoters).toBe(1);
+    expect(seen.myVotes).toEqual([]);
+
+    // A validation: a poll needs 2+ options.
+    const bad = await request(app)
+      .post(`/api/chats/${chatId}/polls`)
+      .set(bearer(a.token))
+      .send({ question: "Bad", options: ["only one"] });
+    expect(bad.status).toBe(400);
+  });
+
+  it("quiz poll reveals the answer after voting and on close", async () => {
+    const a = await registerUser(app, { email: "qz_a@relayone.test", username: "quiz_a" });
+    const b = await registerUser(app, { email: "qz_b@relayone.test", username: "quiz_b" });
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    const created = await request(app)
+      .post(`/api/chats/${chatId}/polls`)
+      .set(bearer(a.token))
+      .send({ question: "2+2?", options: ["3", "4", "5"], isQuiz: true, correctIndex: 1 });
+    const poll = created.body.data.poll;
+    const wrong = poll.options.find((o: any) => o.text === "3").id;
+    const right = poll.options.find((o: any) => o.text === "4").id;
+
+    // Before voting, the correct answer is hidden.
+    expect(poll.options.every((o: any) => o.correct === undefined)).toBe(true);
+
+    // B votes wrong → the answer is revealed to B.
+    const v = await request(app)
+      .post(`/api/polls/${poll.id}/vote`)
+      .set(bearer(b.token))
+      .send({ optionIds: [wrong] });
+    expect(v.body.data.options.find((o: any) => o.id === right).correct).toBe(true);
+    expect(v.body.data.options.find((o: any) => o.id === wrong).correct).toBe(false);
+
+    // Only the author can close; then it's closed.
+    const denied = await request(app).post(`/api/polls/${poll.id}/close`).set(bearer(b.token));
+    expect(denied.status).toBe(403);
+    const closed = await request(app).post(`/api/polls/${poll.id}/close`).set(bearer(a.token));
+    expect(closed.body.data.closed).toBe(true);
+
+    // Voting a closed poll is rejected.
+    const late = await request(app)
+      .post(`/api/polls/${poll.id}/vote`)
+      .set(bearer(a.token))
+      .send({ optionIds: [right] });
+    expect(late.status).toBe(400);
+  });
+
   it("keeps an edit history", async () => {
     const a = await registerUser(app, { email: "hist_a@relayone.test", username: "hist_a" });
     const b = await registerUser(app, { email: "hist_b@relayone.test", username: "hist_b" });

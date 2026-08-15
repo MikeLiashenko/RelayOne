@@ -7,13 +7,16 @@ import {
   messageEdits,
   messageReactions,
   messages,
+  pollOptions,
+  pollVotes,
+  polls,
   users,
   type Attachment,
   type Message,
   type MessageReaction,
 } from "../db/schema";
 import { AppError } from "../shared/errors";
-import { toPublicAttachment, toPublicMessage } from "../shared/serialize";
+import { toPublicAttachment, toPublicMessage, toPublicPoll } from "../shared/serialize";
 import type { PublicMessage } from "../shared/types";
 import { hub } from "../realtime/hub";
 import { chatService } from "./chatService";
@@ -25,7 +28,7 @@ import { pushService } from "./pushService";
  * authorized against chat membership, and mutations fan out over realtime.
  */
 export const messageService = {
-  async hydrate(rows: Message[]): Promise<PublicMessage[]> {
+  async hydrate(rows: Message[], viewerId?: string): Promise<PublicMessage[]> {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.id);
     const db = getDb();
@@ -33,6 +36,20 @@ export const messageService = {
     const replyIds = [
       ...new Set(rows.map((r) => r.replyToId).filter((id): id is string => !!id)),
     ];
+
+    // Load any polls attached to these messages, with their options + votes.
+    const pollRows = await db.select().from(polls).where(inArray(polls.messageId, ids));
+    const pollByMsg = new Map<string, ReturnType<typeof toPublicPoll>>();
+    if (pollRows.length) {
+      const pollIds = pollRows.map((p) => p.id);
+      const [opts, pvotes] = await Promise.all([
+        db.select().from(pollOptions).where(inArray(pollOptions.pollId, pollIds)),
+        db.select().from(pollVotes).where(inArray(pollVotes.pollId, pollIds)),
+      ]);
+      for (const p of pollRows) {
+        pollByMsg.set(p.messageId, toPublicPoll(p, opts, pvotes, viewerId));
+      }
+    }
 
     const [atts, reacts, parents, replyCounts] = await Promise.all([
       db.select().from(attachments).where(inArray(attachments.messageId, ids)),
@@ -53,15 +70,18 @@ export const messageService = {
     const parentById = new Map(parents.map((p) => [p.id, p]));
     const countByMsg = new Map(replyCounts.map((r) => [r.pid, Number(r.c)]));
 
-    return rows.map((m) =>
-      toPublicMessage(
+    return rows.map((m) => {
+      const pm = toPublicMessage(
         m,
         attByMsg.get(m.id) ?? [],
         reactByMsg.get(m.id) ?? [],
         m.replyToId ? parentById.get(m.replyToId) ?? null : null,
         countByMsg.get(m.id) ?? 0
-      )
-    );
+      );
+      const poll = pollByMsg.get(m.id);
+      if (poll) pm.poll = poll;
+      return pm;
+    });
   },
 
   async list(
@@ -81,7 +101,7 @@ export const messageService = {
       .limit(opts.limit);
 
     // Return chronological (oldest → newest).
-    return this.hydrate(rows.reverse());
+    return this.hydrate(rows.reverse(), userId);
   },
 
   /**
@@ -121,7 +141,7 @@ export const messageService = {
       .orderBy(desc(messages.createdAt))
       .limit(opts.limit);
 
-    return this.hydrate(rows);
+    return this.hydrate(rows, userId);
   },
 
   /**
@@ -193,8 +213,8 @@ export const messageService = {
       .from(messages)
       .where(and(eq(messages.replyToId, messageId), isNull(messages.deletedAt)))
       .orderBy(messages.createdAt);
-    const [parentPublic] = await this.hydrate([parent]);
-    const replies = await this.hydrate(replyRows);
+    const [parentPublic] = await this.hydrate([parent], userId);
+    const replies = await this.hydrate(replyRows, userId);
     return { parent: parentPublic!, replies };
   },
 
@@ -255,7 +275,7 @@ export const messageService = {
 
     await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, chatId));
 
-    const [full] = await this.hydrate([message!]);
+    const [full] = await this.hydrate([message!], senderId);
     const memberIds = await chatService.getMemberIds(chatId);
 
     // Notify + broadcast to everyone in the chat.
@@ -321,7 +341,7 @@ export const messageService = {
     if (message.deletedAt) {
       throw AppError.validation("You can't edit a deleted message.");
     }
-    if (content === message.content) return (await this.hydrate([message]))[0]!;
+    if (content === message.content) return (await this.hydrate([message], userId))[0]!;
 
     const db = getDb();
     // Snapshot the version being replaced, so the full edit history is kept.
@@ -337,7 +357,7 @@ export const messageService = {
       .where(eq(messages.id, messageId))
       .returning();
 
-    const [full] = await this.hydrate([updated!]);
+    const [full] = await this.hydrate([updated!], userId);
     const memberIds = await chatService.getMemberIds(message.chatId);
     hub.broadcastToUsers(memberIds, { type: "message.edited", message: full! });
     return full!;
@@ -403,7 +423,7 @@ export const messageService = {
       .where(eq(messages.id, messageId))
       .returning();
 
-    const [full] = await this.hydrate([updated!]);
+    const [full] = await this.hydrate([updated!], userId);
     const memberIds = await chatService.getMemberIds(message.chatId);
     hub.broadcastToUsers(memberIds, {
       type: "message.pin",
@@ -424,7 +444,7 @@ export const messageService = {
       .from(messages)
       .where(and(eq(messages.chatId, chatId), isNotNull(messages.pinnedAt)))
       .orderBy(desc(messages.pinnedAt));
-    return this.hydrate(rows);
+    return this.hydrate(rows, userId);
   },
 
   async addReaction(

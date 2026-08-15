@@ -9,6 +9,7 @@ import { chatsRouter } from "./routes/chats.routes";
 import { linkRouter } from "./routes/link.routes";
 import { messagesRouter } from "./routes/messages.routes";
 import { notificationsRouter } from "./routes/notifications.routes";
+import { pollsRouter } from "./routes/polls.routes";
 import { profilesRouter } from "./routes/profiles.routes";
 import { pushRouter } from "./routes/push.routes";
 import { sessionsRouter } from "./routes/sessions.routes";
@@ -35,6 +36,7 @@ export function createApp(): Express {
   app.use("/api/profiles", profilesRouter);
   app.use("/api/chats", chatsRouter);
   app.use("/api/messages", messagesRouter);
+  app.use("/api/polls", pollsRouter);
   app.use("/api/attachments", attachmentsRouter);
   app.use("/api/notifications", notificationsRouter);
   app.use("/api/push", pushRouter);

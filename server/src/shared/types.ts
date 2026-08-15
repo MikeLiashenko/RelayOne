@@ -74,6 +74,29 @@ export interface ReplyPreview {
   content: string | null;
 }
 
+export interface PublicPollOption {
+  id: string;
+  text: string;
+  votes: number;
+  /** Quiz only, revealed once the viewer has voted or the poll is closed. */
+  correct?: boolean;
+  /** Non-anonymous polls only: who picked this option. */
+  voters?: string[];
+}
+
+export interface PublicPoll {
+  id: string;
+  question: string;
+  allowsMultiple: boolean;
+  anonymous: boolean;
+  isQuiz: boolean;
+  closed: boolean;
+  totalVoters: number;
+  options: PublicPollOption[];
+  /** Option ids the viewer voted for. */
+  myVotes: string[];
+}
+
 export interface PublicMessage {
   id: string;
   chatId: string;
@@ -86,6 +109,7 @@ export interface PublicMessage {
   pinnedBy: string | null;
   replyTo: ReplyPreview | null;
   replyCount: number;
+  poll: PublicPoll | null;
   attachments: PublicAttachment[];
   reactions: PublicReaction[];
 }

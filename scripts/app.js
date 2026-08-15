@@ -220,6 +220,16 @@ function wireStaticUI() {
   );
   $('[data-action="emoji"]').addEventListener("click", (e) => toggleEmojiPicker(e.currentTarget));
 
+  // 📊 Poll composer.
+  $('[data-action="poll"]').addEventListener("click", openPollModal);
+  $('[data-action="close-poll"]').addEventListener("click", closePollModal);
+  $('[data-action="poll-add-option"]').addEventListener("click", addPollOption);
+  $('[data-action="poll-create"]').addEventListener("click", submitPoll);
+  $('[data-role="poll-quiz"]').addEventListener("change", syncQuizMode);
+  $('[data-role="poll-modal"]').addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closePollModal();
+  });
+
   $('[data-action="open-saved"]').addEventListener("click", openSaved);
   $('[data-action="jump-pin"]').addEventListener("click", jumpNextPin);
   $('[data-action="toggle-pins"]').addEventListener("click", togglePinsPanel);
@@ -756,6 +766,11 @@ function messageNode(m) {
     bubbleChildren.push(el("div", { class: "msg__text" }, renderMarkdown(m.content)));
   }
 
+  // 📊 Poll / quiz card.
+  if (!deleted && m.poll) {
+    bubbleChildren.push(pollCard(m));
+  }
+
   // Link preview card (first URL in the text).
   if (!deleted && m.content) {
     const url = firstUrl(m.content);
@@ -890,6 +905,154 @@ function groupReactions(reactions = []) {
     map.set(r.emoji, cur);
   }
   return [...map.values()];
+}
+
+/* -- 📊 Polls & quizzes ---------------------------------------------------- */
+
+function openPollModal() {
+  if (!state.activeId) return;
+  $('[data-role="poll-question"]').value = "";
+  $('[data-role="poll-multiple"]').checked = false;
+  $('[data-role="poll-anon"]').checked = false;
+  $('[data-role="poll-quiz"]').checked = false;
+  setPollError("");
+  const opts = $('[data-role="poll-options"]');
+  clear(opts);
+  addPollOption();
+  addPollOption();
+  syncQuizMode();
+  $('[data-role="poll-modal"]').hidden = false;
+}
+function closePollModal() {
+  $('[data-role="poll-modal"]').hidden = true;
+}
+function addPollOption() {
+  const opts = $('[data-role="poll-options"]');
+  if (opts.children.length >= 10) return;
+  const row = el("div", { class: "poll-opt-row" },
+    el("input", { type: "radio", name: "poll-correct", class: "poll-opt-row__correct", title: "Correct answer", hidden: true }),
+    el("input", { type: "text", class: "poll-opt-row__text", placeholder: `Option ${opts.children.length + 1}`, maxlength: "100" }),
+    el("button", {
+      class: "poll-opt-row__remove", type: "button", title: "Remove",
+      onClick: () => { if (opts.children.length > 2) row.remove(); },
+    }, "✕"));
+  opts.append(row);
+  syncQuizMode();
+}
+function syncQuizMode() {
+  const quiz = $('[data-role="poll-quiz"]').checked;
+  const multiple = $('[data-role="poll-multiple"]');
+  if (quiz) { multiple.checked = false; multiple.disabled = true; }
+  else multiple.disabled = false;
+  $$('.poll-opt-row__correct').forEach((r) => (r.hidden = !quiz));
+}
+function setPollError(msg) {
+  const e = $('[data-role="poll-error"]');
+  e.textContent = msg;
+  e.hidden = !msg;
+}
+async function submitPoll() {
+  const question = $('[data-role="poll-question"]').value.trim();
+  const rows = $$('.poll-opt-row');
+  const nonEmpty = rows.filter((r) => r.querySelector(".poll-opt-row__text").value.trim());
+  const options = nonEmpty.map((r) => r.querySelector(".poll-opt-row__text").value.trim());
+  if (!question) return setPollError("Add a question.");
+  if (options.length < 2) return setPollError("Add at least two options.");
+
+  const isQuiz = $('[data-role="poll-quiz"]').checked;
+  const body = {
+    question,
+    options,
+    allowsMultiple: $('[data-role="poll-multiple"]').checked,
+    anonymous: $('[data-role="poll-anon"]').checked,
+    isQuiz,
+  };
+  if (isQuiz) {
+    const idx = nonEmpty.findIndex((r) => r.querySelector(".poll-opt-row__correct").checked);
+    if (idx < 0) return setPollError("Mark the correct answer.");
+    body.correctIndex = idx;
+  }
+  const r = await api.createPoll(state.activeId, body);
+  if (r.ok) closePollModal();
+  else setPollError(r.error?.message || "Couldn’t create the poll.");
+}
+
+function pollCard(m) {
+  const p = m.poll;
+  const mine = m.senderId === state.me.id;
+  const denom = Math.max(p.totalVoters, 1);
+  const card = el("div", { class: "poll" + (p.closed ? " poll--closed" : "") });
+  card.append(el("div", { class: "poll__q" }, (p.isQuiz ? "🧠 " : "") + p.question));
+
+  const canMultiSubmit = p.allowsMultiple && !p.closed && p.myVotes.length === 0;
+  const selected = new Set();
+
+  for (const opt of p.options) {
+    const voted = p.myVotes.includes(opt.id);
+    const pct = Math.round((opt.votes / denom) * 100);
+    const row = el("button", {
+      class: "poll-opt"
+        + (voted ? " is-voted" : "")
+        + (opt.correct === true ? " is-correct" : "")
+        + (opt.correct === false && voted ? " is-wrong" : ""),
+      type: "button",
+      disabled: p.closed,
+      onClick: () => {
+        if (p.closed) return;
+        if (canMultiSubmit) {
+          row.classList.toggle("is-selected");
+          if (selected.has(opt.id)) selected.delete(opt.id);
+          else selected.add(opt.id);
+        } else {
+          castVote(m, [opt.id]);
+        }
+      },
+    },
+      el("span", { class: "poll-opt__bar", style: `width:${pct}%` }),
+      el("span", { class: "poll-opt__label" }, opt.text),
+      el("span", { class: "poll-opt__pct" }, `${pct}%`));
+    card.append(row);
+  }
+
+  if (canMultiSubmit) {
+    card.append(el("button", {
+      class: "poll__vote", type: "button",
+      onClick: () => { if (selected.size) castVote(m, [...selected]); },
+    }, "Vote"));
+  }
+
+  const parts = [`${p.totalVoters} ${p.totalVoters === 1 ? "vote" : "votes"}`];
+  if (p.anonymous) parts.push("Anonymous");
+  if (p.closed) parts.push("Closed");
+  const foot = el("div", { class: "poll__foot" }, el("span", {}, parts.join(" · ")));
+  if (mine && !p.closed) {
+    foot.append(el("button", { class: "poll__close", type: "button", onClick: () => closePollAction(m) }, "Close poll"));
+  }
+  card.append(foot);
+  return card;
+}
+async function castVote(m, optionIds) {
+  const r = await api.votePoll(m.poll.id, optionIds);
+  if (r.ok) { m.poll = r.data; replaceMessageNode(m); }
+}
+async function closePollAction(m) {
+  const r = await api.closePoll(m.poll.id);
+  if (r.ok) { m.poll = r.data; replaceMessageNode(m); }
+}
+function onPollUpdate(ev) {
+  if (ev.chatId !== state.activeId) return;
+  const m = state.messages.find((x) => x.id === ev.messageId);
+  if (!m || !m.poll) return;
+  const byId = new Map(ev.options.map((o) => [o.id, o.votes]));
+  const reveal = ev.correctOptionId !== undefined && ev.correctOptionId !== null;
+  m.poll.options = m.poll.options.map((o) => ({
+    ...o,
+    votes: byId.has(o.id) ? byId.get(o.id) : o.votes,
+    ...(reveal ? { correct: o.id === ev.correctOptionId } : {}),
+  }));
+  m.poll.totalVoters = ev.totalVoters;
+  m.poll.closed = ev.closed;
+  replaceMessageNode(m);
 }
 
 /* -- 🧵 Threads ------------------------------------------------------------ */
@@ -1526,6 +1689,7 @@ function wireProfileForms() {
     else if (!$('[data-role="shared-modal"]').hidden) closeSharedMedia();
     else if (!$('[data-role="thread-modal"]').hidden) closeThread();
     else if (!$('[data-role="history-modal"]').hidden) closeHistory();
+    else if (!$('[data-role="poll-modal"]').hidden) closePollModal();
   });
 }
 
@@ -2406,6 +2570,8 @@ function handleRealtime(ev) {
       return onMessagePin(ev);
     case "message.reaction":
       return onReaction(ev);
+    case "poll.update":
+      return onPollUpdate(ev);
     case "typing":
       return onTyping(ev);
     case "presence":

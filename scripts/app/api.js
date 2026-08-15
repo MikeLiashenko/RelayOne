@@ -38,6 +38,12 @@ export const api = {
   searchMessages: (q) => apiFetch(`/messages/search?q=${encodeURIComponent(q)}`),
   listShared: (chatId, type) => apiFetch(`/chats/${chatId}/shared?type=${type}`),
   createChat: (body) => apiFetch("/chats", { method: "POST", body }),
+
+  // Polls & quizzes.
+  createPoll: (chatId, body) => apiFetch(`/chats/${chatId}/polls`, { method: "POST", body }),
+  votePoll: (pollId, optionIds) =>
+    apiFetch(`/polls/${pollId}/vote`, { method: "POST", body: { optionIds } }),
+  closePoll: (pollId) => apiFetch(`/polls/${pollId}/close`, { method: "POST" }),
   createDirect: (otherUserId) =>
     apiFetch("/chats", { method: "POST", body: { type: "direct", memberIds: [otherUserId] } }),
 

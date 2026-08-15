@@ -43,6 +43,16 @@ export type ServerEvent =
       userId: string;
       op: "add" | "remove";
     }
+  | {
+      type: "poll.update";
+      chatId: string;
+      messageId: string;
+      pollId: string;
+      totalVoters: number;
+      closed: boolean;
+      options: Array<{ id: string; votes: number }>;
+      correctOptionId?: string | null;
+    }
   | { type: "typing"; chatId: string; userId: string; isTyping: boolean }
   | { type: "presence"; userId: string; online: boolean }
   | {

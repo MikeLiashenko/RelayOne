@@ -957,3 +957,101 @@
   background: transparent; border: 0; border-radius: 7px; cursor: pointer;
 }
 .emoji-picker__btn:hover { background: var(--surface-field); }
+
+/* ==========================================================================
+   📊 Polls & quizzes
+   ========================================================================== */
+/* Composer */
+.poll-form__q {
+  width: 100%;
+  resize: none;
+  min-height: 44px;
+  padding: 10px 12px;
+  margin-bottom: var(--space-3);
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.poll-form__options { display: flex; flex-direction: column; gap: 6px; }
+.poll-opt-row { display: flex; align-items: center; gap: 8px; }
+.poll-opt-row__correct { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--color-success); }
+.poll-opt-row__correct[hidden] { display: none; }
+.poll-opt-row__text {
+  flex: 1;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.poll-opt-row__remove {
+  flex: 0 0 auto; width: 28px; height: 28px;
+  color: var(--text-muted); background: transparent; border: 0; border-radius: 6px; cursor: pointer;
+}
+.poll-opt-row__remove:hover { color: var(--color-danger); background: var(--surface-field); }
+.poll-form__add {
+  align-self: flex-start;
+  margin: 8px 0 var(--space-3);
+  padding: 6px 12px;
+  font: inherit; font-size: 0.8125rem; font-weight: var(--fw-medium);
+  color: var(--color-blue); background: transparent; border: 0; cursor: pointer;
+}
+.poll-form__check { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.9375rem; cursor: pointer; }
+.poll-form__check input { width: 18px; height: 18px; accent-color: var(--color-blue); }
+.poll-form .btn, [data-role="poll-modal"] .btn--primary { margin-top: var(--space-2); }
+
+/* Card in a message */
+.poll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 240px;
+  max-width: 340px;
+  margin: 2px 0;
+}
+.poll__q { font-weight: var(--fw-semibold); margin-bottom: 2px; }
+.poll-opt {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--surface-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.poll-opt:disabled { cursor: default; }
+.poll-opt__bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: color-mix(in srgb, var(--color-blue) 20%, transparent);
+  transition: width var(--dur-med) var(--ease-out);
+  z-index: 0;
+}
+.poll-opt__label { position: relative; z-index: 1; flex: 1; }
+.poll-opt__pct { position: relative; z-index: 1; font-size: 0.8125rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.poll-opt.is-selected { border-color: var(--color-blue); }
+.poll-opt.is-voted { border-color: var(--color-blue); }
+.poll-opt.is-voted .poll-opt__bar { background: color-mix(in srgb, var(--color-blue) 32%, transparent); }
+.poll-opt.is-correct { border-color: var(--color-success); }
+.poll-opt.is-correct .poll-opt__bar { background: color-mix(in srgb, var(--color-success) 30%, transparent); }
+.poll-opt.is-wrong { border-color: var(--color-danger); }
+.poll-opt.is-wrong .poll-opt__bar { background: color-mix(in srgb, var(--color-danger) 26%, transparent); }
+.poll__vote {
+  align-self: flex-start;
+  padding: 6px 16px;
+  font: inherit; font-size: 0.8125rem; font-weight: var(--fw-semibold);
+  color: #fff; background-image: var(--gradient-accent);
+  border: 0; border-radius: var(--radius-pill); cursor: pointer;
+}
+.poll__foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+.poll__close { font: inherit; font-size: 0.75rem; color: var(--color-danger); background: transparent; border: 0; cursor: pointer; padding: 0; }
+.poll__close:hover { text-decoration: underline; }

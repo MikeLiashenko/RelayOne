@@ -254,6 +254,7 @@
           <button class="fmt-btn" type="button" data-fmt="code" title="Code (`text`)">&lt;/&gt;</button>
           <button class="fmt-btn" type="button" data-fmt="link" title="Link">🔗</button>
           <button class="fmt-btn" type="button" data-action="emoji" title="Emoji">😊</button>
+          <button class="fmt-btn" type="button" data-action="poll" title="Create poll">📊</button>
         </div>
 
         <form class="composer" data-role="composer">
@@ -408,6 +409,28 @@
     </div>
 
     <!-- ================= SETTINGS MODAL ================= -->
+    <!-- ================= POLL MODAL ================= -->
+    <div class="modal" data-role="poll-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2>📊 New poll</h2>
+          <button class="icon-btn" type="button" data-action="close-poll" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <textarea class="poll-form__q" data-role="poll-question" rows="1" placeholder="Ask a question…" maxlength="300" aria-label="Poll question"></textarea>
+        <div class="poll-form__options" data-role="poll-options"></div>
+        <button class="poll-form__add" type="button" data-action="poll-add-option">+ Add option</button>
+        <label class="poll-form__check"><input type="checkbox" data-role="poll-multiple" /> <span>Allow multiple answers</span></label>
+        <label class="poll-form__check"><input type="checkbox" data-role="poll-anon" /> <span>Anonymous voting</span></label>
+        <label class="poll-form__check"><input type="checkbox" data-role="poll-quiz" /> <span>Quiz mode (mark the correct answer)</span></label>
+        <div class="composer-error" data-role="poll-error" hidden></div>
+        <button class="btn btn--primary" type="button" data-action="poll-create">Create poll</button>
+      </div>
+    </div>
+
     <!-- ================= THREAD MODAL ================= -->
     <div class="modal" data-role="thread-modal" hidden>
       <div class="modal__card modal__card--tall">

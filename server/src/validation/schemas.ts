@@ -108,6 +108,40 @@ export const updateProfileSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, "No fields to update.");
 
+/* -- Polls ----------------------------------------------------------------- */
+
+export const createPollSchema = z
+  .object({
+    question: z.string().trim().min(1).max(300),
+    options: z.array(z.string().trim().min(1).max(100)).min(2).max(10),
+    allowsMultiple: z.boolean().default(false),
+    anonymous: z.boolean().default(false),
+    isQuiz: z.boolean().default(false),
+    correctIndex: z.number().int().min(0).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.isQuiz) {
+      if (v.allowsMultiple) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["allowsMultiple"],
+          message: "A quiz can't allow multiple answers.",
+        });
+      }
+      if (v.correctIndex == null || v.correctIndex >= v.options.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["correctIndex"],
+          message: "Select which answer is correct.",
+        });
+      }
+    }
+  });
+
+export const votePollSchema = z.object({
+  optionIds: z.array(z.string().uuid()).min(1).max(10),
+});
+
 /* -- Chats ----------------------------------------------------------------- */
 
 export const createChatSchema = z

@@ -348,6 +348,60 @@ export const pushSubscriptions = pgTable(
 );
 
 /* ==========================================================================
+   polls — a poll attached to a message (+ options + votes)
+   ========================================================================== */
+
+export const polls = pgTable("polls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  messageId: uuid("message_id")
+    .notNull()
+    .unique()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  question: text("question").notNull(),
+  allowsMultiple: boolean("allows_multiple").notNull().default(false),
+  anonymous: boolean("anonymous").notNull().default(false),
+  isQuiz: boolean("is_quiz").notNull().default(false),
+  correctOptionId: uuid("correct_option_id"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  createdAt,
+});
+
+export const pollOptions = pgTable(
+  "poll_options",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pollId: uuid("poll_id")
+      .notNull()
+      .references(() => polls.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => ({ byPoll: index("poll_options_poll_id_idx").on(t.pollId) })
+);
+
+export const pollVotes = pgTable(
+  "poll_votes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pollId: uuid("poll_id")
+      .notNull()
+      .references(() => polls.id, { onDelete: "cascade" }),
+    optionId: uuid("option_id")
+      .notNull()
+      .references(() => pollOptions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt,
+  },
+  (t) => ({
+    byPoll: index("poll_votes_poll_id_idx").on(t.pollId),
+    // One row per (poll, user, option) — prevents double-voting the same option.
+    uniqueVote: uniqueIndex("poll_votes_unique").on(t.pollId, t.userId, t.optionId),
+  })
+);
+
+/* ==========================================================================
    message_edits — prior versions of an edited message (edit history)
    ========================================================================== */
 
@@ -412,3 +466,6 @@ export type Message = typeof messages.$inferSelect;
 export type MessageReaction = typeof messageReactions.$inferSelect;
 export type Attachment = typeof attachments.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type Poll = typeof polls.$inferSelect;
+export type PollOption = typeof pollOptions.$inferSelect;
+export type PollVote = typeof pollVotes.$inferSelect;
