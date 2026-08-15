@@ -1,9 +1,10 @@
-import { and, desc, eq, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   attachments,
   chatMembers,
   chats,
+  messageEdits,
   messageReactions,
   messages,
   users,
@@ -33,24 +34,32 @@ export const messageService = {
       ...new Set(rows.map((r) => r.replyToId).filter((id): id is string => !!id)),
     ];
 
-    const [atts, reacts, parents] = await Promise.all([
+    const [atts, reacts, parents, replyCounts] = await Promise.all([
       db.select().from(attachments).where(inArray(attachments.messageId, ids)),
       db.select().from(messageReactions).where(inArray(messageReactions.messageId, ids)),
       replyIds.length
         ? db.select().from(messages).where(inArray(messages.id, replyIds))
         : Promise.resolve([] as Message[]),
+      // How many (non-deleted) replies each of these messages has — the thread size.
+      db
+        .select({ pid: messages.replyToId, c: count() })
+        .from(messages)
+        .where(and(inArray(messages.replyToId, ids), isNull(messages.deletedAt)))
+        .groupBy(messages.replyToId),
     ]);
 
     const attByMsg = groupBy(atts, (a) => a.messageId ?? "");
     const reactByMsg = groupBy(reacts, (r) => r.messageId);
     const parentById = new Map(parents.map((p) => [p.id, p]));
+    const countByMsg = new Map(replyCounts.map((r) => [r.pid, Number(r.c)]));
 
     return rows.map((m) =>
       toPublicMessage(
         m,
         attByMsg.get(m.id) ?? [],
         reactByMsg.get(m.id) ?? [],
-        m.replyToId ? parentById.get(m.replyToId) ?? null : null
+        m.replyToId ? parentById.get(m.replyToId) ?? null : null,
+        countByMsg.get(m.id) ?? 0
       )
     );
   },
@@ -171,6 +180,22 @@ export const messageService = {
       messageId: r.a.messageId,
       createdAt: r.ts.toISOString(),
     }));
+  },
+
+  /** A message and all of its (non-deleted) replies — the thread view. */
+  async listThread(
+    messageId: string,
+    userId: string
+  ): Promise<{ parent: PublicMessage; replies: PublicMessage[] }> {
+    const parent = await this.getForUser(messageId, userId); // authorizes membership
+    const replyRows = await getDb()
+      .select()
+      .from(messages)
+      .where(and(eq(messages.replyToId, messageId), isNull(messages.deletedAt)))
+      .orderBy(messages.createdAt);
+    const [parentPublic] = await this.hydrate([parent]);
+    const replies = await this.hydrate(replyRows);
+    return { parent: parentPublic!, replies };
   },
 
   async getForUser(messageId: string, userId: string): Promise<Message> {
@@ -296,8 +321,17 @@ export const messageService = {
     if (message.deletedAt) {
       throw AppError.validation("You can't edit a deleted message.");
     }
+    if (content === message.content) return (await this.hydrate([message]))[0]!;
 
-    const [updated] = await getDb()
+    const db = getDb();
+    // Snapshot the version being replaced, so the full edit history is kept.
+    await db.insert(messageEdits).values({
+      messageId,
+      content: message.content,
+      editedAt: message.editedAt ?? message.createdAt,
+    });
+
+    const [updated] = await db
       .update(messages)
       .set({ content, editedAt: new Date() })
       .where(eq(messages.id, messageId))
@@ -307,6 +341,28 @@ export const messageService = {
     const memberIds = await chatService.getMemberIds(message.chatId);
     hub.broadcastToUsers(memberIds, { type: "message.edited", message: full! });
     return full!;
+  },
+
+  /** Edit history (oldest → newest), with the current version appended last. */
+  async editHistory(
+    messageId: string,
+    userId: string
+  ): Promise<Array<{ content: string | null; editedAt: string }>> {
+    const message = await this.getForUser(messageId, userId);
+    const edits = await getDb()
+      .select()
+      .from(messageEdits)
+      .where(eq(messageEdits.messageId, messageId))
+      .orderBy(messageEdits.editedAt);
+    const versions = edits.map((e) => ({
+      content: e.content,
+      editedAt: e.editedAt.toISOString(),
+    }));
+    versions.push({
+      content: message.deletedAt ? null : message.content,
+      editedAt: (message.editedAt ?? message.createdAt).toISOString(),
+    });
+    return versions;
   },
 
   async remove(messageId: string, userId: string): Promise<void> {

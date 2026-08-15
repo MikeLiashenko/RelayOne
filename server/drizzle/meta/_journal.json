@@ -50,6 +50,13 @@
       "when": 1786820560934,
       "tag": "0006_chemical_blonde_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786822573059,
+      "tag": "0007_lonely_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

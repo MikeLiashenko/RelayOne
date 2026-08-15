@@ -203,4 +203,64 @@ describe("chats, messages & authorization", () => {
       .set(bearer(c.token));
     expect(denied.status).toBe(403);
   });
+
+  it("threads: counts replies and lists a thread", async () => {
+    const a = await registerUser(app, { email: "th_a@relayone.test", username: "thread_a" });
+    const b = await registerUser(app, { email: "th_b@relayone.test", username: "thread_b" });
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    const parent = await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(a.token))
+      .send({ content: "root message" });
+    const parentId = parent.body.data.id;
+
+    await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(b.token))
+      .send({ content: "reply one", replyToId: parentId });
+    await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(a.token))
+      .send({ content: "reply two", replyToId: parentId });
+
+    // The parent now reports 2 replies in the message list.
+    const list = await request(app).get(`/api/chats/${chatId}/messages`).set(bearer(a.token));
+    const root = list.body.data.find((m: any) => m.id === parentId);
+    expect(root.replyCount).toBe(2);
+
+    // The thread endpoint returns the parent + its replies.
+    const thread = await request(app).get(`/api/messages/${parentId}/thread`).set(bearer(b.token));
+    expect(thread.status).toBe(200);
+    expect(thread.body.data.parent.id).toBe(parentId);
+    expect(thread.body.data.replies).toHaveLength(2);
+    expect(thread.body.data.replies[0].content).toBe("reply one");
+  });
+
+  it("keeps an edit history", async () => {
+    const a = await registerUser(app, { email: "hist_a@relayone.test", username: "hist_a" });
+    const b = await registerUser(app, { email: "hist_b@relayone.test", username: "hist_b" });
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    const sent = await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(a.token))
+      .send({ content: "v1" });
+    const id = sent.body.data.id;
+
+    await request(app).patch(`/api/messages/${id}`).set(bearer(a.token)).send({ content: "v2" });
+    await request(app).patch(`/api/messages/${id}`).set(bearer(a.token)).send({ content: "v3" });
+
+    const hist = await request(app).get(`/api/messages/${id}/history`).set(bearer(a.token));
+    expect(hist.status).toBe(200);
+    expect(hist.body.data.map((v: any) => v.content)).toEqual(["v1", "v2", "v3"]);
+  });
 });

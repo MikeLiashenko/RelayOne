@@ -11,6 +11,7 @@ import { createCalls } from "./app/calls/index.js";
 import { createViewer } from "./app/viewer.js";
 import { push } from "./app/push.js";
 import { playEffect, effectForEmoji } from "./app/effects.js";
+import { renderMarkdown } from "./app/markdown.js";
 import { ACCENTS, getAccent, getThemePref, initTheme, setAccent, setTheme } from "./app/features/theme.js";
 import { createFolders } from "./app/features/folders.js";
 import { ROADMAP } from "./app/features/roadmap.js";
@@ -199,6 +200,25 @@ function wireStaticUI() {
   $('[data-role="shared-modal"]').addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeSharedMedia();
   });
+
+  // 🧵 Threads + ✏️ edit history + formatting toolbar.
+  $('[data-action="close-thread"]').addEventListener("click", closeThread);
+  $('[data-action="thread-origin"]').addEventListener("click", threadOriginJump);
+  $('[data-role="thread-composer"]').addEventListener("submit", sendThreadReply);
+  $('[data-role="thread-input"]').addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendThreadReply(e); }
+  });
+  $('[data-role="thread-modal"]').addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeThread();
+  });
+  $('[data-action="close-history"]').addEventListener("click", closeHistory);
+  $('[data-role="history-modal"]').addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeHistory();
+  });
+  $$('[data-fmt]').forEach((b) =>
+    b.addEventListener("click", () => formatAction(b.dataset.fmt))
+  );
+  $('[data-action="emoji"]').addEventListener("click", (e) => toggleEmojiPicker(e.currentTarget));
 
   $('[data-action="open-saved"]').addEventListener("click", openSaved);
   $('[data-action="jump-pin"]').addEventListener("click", jumpNextPin);
@@ -733,7 +753,7 @@ function messageNode(m) {
   if (deleted) {
     bubbleChildren.push(el("div", { class: "msg__text msg__text--deleted" }, "This message was deleted"));
   } else if (m.content) {
-    bubbleChildren.push(el("div", { class: "msg__text" }, m.content));
+    bubbleChildren.push(el("div", { class: "msg__text" }, renderMarkdown(m.content)));
   }
 
   // Link preview card (first URL in the text).
@@ -757,7 +777,13 @@ function messageNode(m) {
     "div",
     { class: "msg__meta" },
     m.pinnedAt && !deleted ? el("span", { class: "msg__pin", title: "Pinned" }, "📌") : null,
-    m.editedAt && !deleted ? el("span", { class: "msg__edited" }, "edited") : null,
+    m.editedAt && !deleted
+      ? el("span", {
+          class: "msg__edited",
+          title: "Show edit history",
+          onClick: (e) => { e.stopPropagation(); openHistory(m.id); },
+        }, "edited")
+      : null,
     el("span", { class: "msg__time" }, timeShort(m.createdAt)),
     mine && !deleted ? el("span", { class: "msg__receipt", dataset: { role: "receipt" } }, "✓") : null
   );
@@ -781,6 +807,17 @@ function messageNode(m) {
       );
     }
     bubbleChildren.push(rrow);
+  }
+
+  // 🧵 Thread badge — opens the discussion of replies to this message.
+  if (!deleted && m.replyCount > 0) {
+    bubbleChildren.push(
+      el("button", {
+        class: "msg__thread",
+        type: "button",
+        onClick: (e) => { e.stopPropagation(); openThread(m.id); },
+      }, `💬 ${m.replyCount} ${m.replyCount === 1 ? "reply" : "replies"}`)
+    );
   }
 
   const bubble = el("div", { class: "msg__bubble" }, ...bubbleChildren);
@@ -853,6 +890,174 @@ function groupReactions(reactions = []) {
     map.set(r.emoji, cur);
   }
   return [...map.values()];
+}
+
+/* -- 🧵 Threads ------------------------------------------------------------ */
+
+let threadParentId = null;
+
+async function openThread(messageId) {
+  threadParentId = messageId;
+  const list = $('[data-role="thread-list"]');
+  clear(list);
+  list.append(el("div", { class: "shared-empty" }, "Loading…"));
+  $('[data-role="thread-modal"]').hidden = false;
+  const r = await api.getThread(messageId);
+  if (threadParentId !== messageId) return;
+  renderThread(r.ok ? r.data : null);
+}
+
+function renderThread(data) {
+  const list = $('[data-role="thread-list"]');
+  clear(list);
+  if (!data) {
+    list.append(el("div", { class: "shared-empty" }, "Couldn’t load the thread."));
+    return;
+  }
+  list.append(threadItem(data.parent, true));
+  for (const rep of data.replies) list.append(threadItem(rep, false));
+  list.scrollTop = list.scrollHeight;
+}
+
+function threadItem(m, isParent) {
+  const body = m.content
+    ? renderMarkdown(m.content)
+    : m.attachments?.length
+      ? "📎 Attachment"
+      : "";
+  return el("div", { class: "thread-msg" + (isParent ? " thread-msg--origin" : "") },
+    el("div", { class: "thread-msg__head" },
+      el("span", { class: "thread-msg__name" }, senderName(m.senderId)),
+      el("span", { class: "thread-msg__time" }, timeShort(m.createdAt))),
+    el("div", { class: "thread-msg__text" }, body));
+}
+
+function closeThread() {
+  $('[data-role="thread-modal"]').hidden = true;
+  threadParentId = null;
+}
+
+function threadOriginJump() {
+  const id = threadParentId;
+  closeThread();
+  if (id) revealMessage(id);
+}
+
+async function sendThreadReply(e) {
+  e.preventDefault();
+  const input = $('[data-role="thread-input"]');
+  const text = input.value.trim();
+  const pid = threadParentId;
+  if (!text || !pid || !state.activeId) return;
+  input.value = "";
+  input.style.height = "";
+  const r = await api.sendMessage(state.activeId, { content: text, replyToId: pid });
+  if (!r.ok) return;
+  // Realtime updates the main chat; refresh the open thread.
+  const res = await api.getThread(pid);
+  if (threadParentId === pid) renderThread(res.ok ? res.data : null);
+}
+
+/* -- ✏️ Edit history ------------------------------------------------------- */
+
+async function openHistory(messageId) {
+  const list = $('[data-role="history-list"]');
+  clear(list);
+  list.append(el("div", { class: "shared-empty" }, "Loading…"));
+  $('[data-role="history-modal"]').hidden = false;
+  const r = await api.messageHistory(messageId);
+  clear(list);
+  const versions = r.ok ? r.data : [];
+  if (!versions.length) {
+    list.append(el("div", { class: "shared-empty" }, "No history."));
+    return;
+  }
+  versions.forEach((v, i) => {
+    const isCurrent = i === versions.length - 1;
+    list.append(
+      el("div", { class: "history-item" + (isCurrent ? " is-current" : "") },
+        el("div", { class: "history-item__label" }, isCurrent ? "Current version" : `Version ${i + 1}`),
+        el("div", { class: "history-item__text" }, v.content ? renderMarkdown(v.content) : "(empty)"),
+        el("div", { class: "history-item__time" }, new Date(v.editedAt).toLocaleString()))
+    );
+  });
+}
+function closeHistory() {
+  $('[data-role="history-modal"]').hidden = true;
+}
+
+/* -- ✏️ Composer formatting toolbar + emoji -------------------------------- */
+
+function wrapSelection(before, after = before) {
+  const ta = $('[data-role="composer-input"]');
+  const s = ta.selectionStart ?? ta.value.length;
+  const e = ta.selectionEnd ?? ta.value.length;
+  const sel = ta.value.slice(s, e) || "text";
+  ta.value = ta.value.slice(0, s) + before + sel + after + ta.value.slice(e);
+  ta.focus();
+  ta.selectionStart = s + before.length;
+  ta.selectionEnd = s + before.length + sel.length;
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function insertLinkMarkup() {
+  const ta = $('[data-role="composer-input"]');
+  const s = ta.selectionStart ?? ta.value.length;
+  const e = ta.selectionEnd ?? ta.value.length;
+  const sel = ta.value.slice(s, e) || "text";
+  const snippet = `[${sel}](https://)`;
+  ta.value = ta.value.slice(0, s) + snippet + ta.value.slice(e);
+  ta.focus();
+  // Put the cursor right before the closing ")" so the URL is easy to type.
+  ta.selectionStart = ta.selectionEnd = s + snippet.length - 1;
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function formatAction(fmt) {
+  if (fmt === "bold") wrapSelection("**");
+  else if (fmt === "italic") wrapSelection("*");
+  else if (fmt === "strike") wrapSelection("~~");
+  else if (fmt === "code") wrapSelection("`");
+  else if (fmt === "link") insertLinkMarkup();
+}
+
+const EMOJIS = [
+  "😀","😂","😍","😎","🤔","😅","😭","😡","👍","👎","🙏","👏","🙌","🔥","🎉","❤️",
+  "💯","✨","⭐","😮","😢","🥳","🤝","👀","💪","🤩","😴","🤯","😱","🫶","💔","☺️",
+];
+let emojiPickerEl = null;
+
+function toggleEmojiPicker(anchor) {
+  if (emojiPickerEl) { emojiPickerEl.remove(); emojiPickerEl = null; return; }
+  const picker = el("div", { class: "emoji-picker" });
+  for (const emo of EMOJIS) {
+    picker.append(el("button", {
+      class: "emoji-picker__btn", type: "button",
+      onClick: () => { insertAtCursor(emo); },
+    }, emo));
+  }
+  document.body.append(picker);
+  const rect = anchor.getBoundingClientRect();
+  picker.style.left = `${Math.max(8, rect.left)}px`;
+  picker.style.top = `${rect.top - picker.offsetHeight - 8}px`;
+  emojiPickerEl = picker;
+  setTimeout(() => document.addEventListener("click", closeEmojiOnOutside), 0);
+}
+function closeEmojiOnOutside(e) {
+  if (emojiPickerEl && !emojiPickerEl.contains(e.target) && !e.target.closest('[data-action="emoji"]')) {
+    emojiPickerEl.remove();
+    emojiPickerEl = null;
+    document.removeEventListener("click", closeEmojiOnOutside);
+  }
+}
+function insertAtCursor(text) {
+  const ta = $('[data-role="composer-input"]');
+  const s = ta.selectionStart ?? ta.value.length;
+  const e = ta.selectionEnd ?? ta.value.length;
+  ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+  ta.selectionStart = ta.selectionEnd = s + text.length;
+  ta.focus();
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function replaceMessageNode(m) {
@@ -1319,6 +1524,8 @@ function wireProfileForms() {
     else if (!$('[data-role="profile-modal"]').hidden) closeViewProfile();
     else if (!$('[data-role="new-chat-modal"]').hidden) closeNewChat();
     else if (!$('[data-role="shared-modal"]').hidden) closeSharedMedia();
+    else if (!$('[data-role="thread-modal"]').hidden) closeThread();
+    else if (!$('[data-role="history-modal"]').hidden) closeHistory();
   });
 }
 
@@ -2626,6 +2833,16 @@ function onNewMessage(message) {
     const node = messageNode(message);
     state.msgNodes.set(message.id, node);
     msgEl.append(node);
+
+    // 🧵 A reply bumps its parent's thread count (badge appears/updates live).
+    if (message.replyTo) {
+      const parent = state.messages.find((m) => m.id === message.replyTo.id);
+      if (parent) {
+        parent.replyCount = (parent.replyCount ?? 0) + 1;
+        replaceMessageNode(parent);
+      }
+    }
+
     if (near || message.senderId === state.me.id) scrollToBottom();
     refreshReceipts();
     if (message.senderId !== state.me.id && near) markReadLatest();

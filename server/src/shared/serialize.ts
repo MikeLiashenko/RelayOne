@@ -98,7 +98,8 @@ export function toPublicMessage(
   m: Message,
   attachments: Attachment[] = [],
   reactions: MessageReaction[] = [],
-  replyTo: Message | null = null
+  replyTo: Message | null = null,
+  replyCount = 0
 ): PublicMessage {
   return {
     id: m.id,
@@ -118,6 +119,7 @@ export function toPublicMessage(
           content: replyTo.deletedAt ? null : replyTo.content,
         }
       : null,
+    replyCount,
     attachments: m.deletedAt ? [] : attachments.map(toPublicAttachment),
     reactions: reactions.map(toPublicReaction),
   };

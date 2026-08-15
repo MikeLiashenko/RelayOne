@@ -348,6 +348,25 @@ export const pushSubscriptions = pgTable(
 );
 
 /* ==========================================================================
+   message_edits — prior versions of an edited message (edit history)
+   ========================================================================== */
+
+export const messageEdits = pgTable(
+  "message_edits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    content: text("content"),
+    editedAt: timestamp("edited_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byMessage: index("message_edits_message_id_idx").on(t.messageId),
+  })
+);
+
+/* ==========================================================================
    notifications
    ========================================================================== */
 

@@ -22,6 +22,26 @@ messagesRouter.get(
   })
 );
 
+/** A message + its replies (thread view). */
+messagesRouter.get(
+  "/:id/thread",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    sendData(res, await messageService.listThread(id, user.id));
+  })
+);
+
+/** The edit history of a message (oldest → newest), current version last. */
+messagesRouter.get(
+  "/:id/history",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    sendData(res, await messageService.editHistory(id, user.id));
+  })
+);
+
 /** Edit your own message. */
 messagesRouter.patch(
   "/:id",

@@ -85,6 +85,7 @@ export interface PublicMessage {
   pinnedAt: string | null;
   pinnedBy: string | null;
   replyTo: ReplyPreview | null;
+  replyCount: number;
   attachments: PublicAttachment[];
   reactions: PublicReaction[];
 }

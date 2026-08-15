@@ -247,6 +247,15 @@
 
         <div class="attach-tray" data-role="attach-tray" hidden></div>
 
+        <div class="composer-toolbar" data-role="composer-toolbar">
+          <button class="fmt-btn" type="button" data-fmt="bold" title="Bold (**text**)"><b>B</b></button>
+          <button class="fmt-btn" type="button" data-fmt="italic" title="Italic (*text*)"><i>I</i></button>
+          <button class="fmt-btn" type="button" data-fmt="strike" title="Strikethrough (~~text~~)"><s>S</s></button>
+          <button class="fmt-btn" type="button" data-fmt="code" title="Code (`text`)">&lt;/&gt;</button>
+          <button class="fmt-btn" type="button" data-fmt="link" title="Link">🔗</button>
+          <button class="fmt-btn" type="button" data-action="emoji" title="Emoji">😊</button>
+        </div>
+
         <form class="composer" data-role="composer">
           <input type="file" data-role="attach-input" multiple hidden />
           <button class="icon-btn" type="button" data-action="attach"
@@ -399,6 +408,45 @@
     </div>
 
     <!-- ================= SETTINGS MODAL ================= -->
+    <!-- ================= THREAD MODAL ================= -->
+    <div class="modal" data-role="thread-modal" hidden>
+      <div class="modal__card modal__card--tall">
+        <header class="modal__head">
+          <h2>🧵 Thread</h2>
+          <button class="icon-btn" type="button" data-action="close-thread" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <button class="thread__origin" type="button" data-action="thread-origin">↑ Go to original message</button>
+        <div class="thread__list" data-role="thread-list"></div>
+        <form class="thread__composer" data-role="thread-composer">
+          <textarea class="thread__input" data-role="thread-input" rows="1" placeholder="Reply in thread…" aria-label="Reply in thread"></textarea>
+          <button class="composer__send" type="submit" aria-label="Send reply">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 12l16-8-8 16-2-6-6-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ================= EDIT HISTORY MODAL ================= -->
+    <div class="modal" data-role="history-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2>Edit history</h2>
+          <button class="icon-btn" type="button" data-action="close-history" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <div class="history__list" data-role="history-list"></div>
+      </div>
+    </div>
+
     <!-- ================= SHARED MEDIA MODAL ================= -->
     <div class="modal" data-role="shared-modal" hidden>
       <div class="modal__card modal__card--tall">
