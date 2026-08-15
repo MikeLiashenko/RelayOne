@@ -145,7 +145,6 @@ function wireStaticUI() {
     renderChatList();
   });
 
-  $('[data-action="new-chat"]').addEventListener("click", openNewChat);
   $('[data-action="close-new-chat"]').addEventListener("click", closeNewChat);
   $('[data-action="back"]').addEventListener("click", () => {
     $(".messenger").dataset.view = "list";
