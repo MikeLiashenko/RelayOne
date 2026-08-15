@@ -11,13 +11,14 @@
  * untouched — they always go straight to the network. Non-GET requests
  * (messages, uploads) are never cached.
  */
-const CACHE = "relayone-v1";
+const CACHE = "relayone-v2";
 const SHELL = [
   "./",
   "index.html",
   "app.html",
   "login.html",
   "register.html",
+  "offline.html",
 ];
 
 self.addEventListener("install", (event) => {
@@ -56,10 +57,16 @@ self.addEventListener("fetch", (event) => {
         }
         return res;
       })
-      .catch(() =>
-        caches
-          .match(req)
-          .then((cached) => cached || caches.match("index.html"))
-      )
+      .catch(async () => {
+        // Offline. Serve the last-cached copy of this exact request if we have
+        // it; otherwise, for a page navigation, show our branded offline screen
+        // (never the browser's raw error page).
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        if (req.mode === "navigate") {
+          return (await caches.match("offline.html")) || (await caches.match("index.html"));
+        }
+        return Response.error();
+      })
   );
 });
