@@ -13,13 +13,22 @@
  */
 
 /**
+ * The deployed backend. Used as the default when the frontend is opened from a
+ * real host (e.g. GitHub Pages) so any visitor — on any device, with no query
+ * param — reaches the API automatically. Overridable per-browser via ?api=.
+ */
+const PRODUCTION_API_BASE = "https://relayone-api.onrender.com";
+
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]", ""];
+
+/**
  * Resolve the backend base URL. RelayOne's frontend is static, but the API is a
- * separate Node server — on static hosting (e.g. GitHub Pages) you must point it
- * at a running backend. Priority:
+ * separate Node server — on static hosting (e.g. GitHub Pages) it must point at
+ * a running backend. Priority:
  *   1. window.RELAYONE_API_BASE  (set inline before scripts load)
  *   2. ?api=<url>                (persisted to localStorage, so you set it once)
  *   3. localStorage "relayone.apiBase"
- *   4. http://localhost:4000     (local dev default)
+ *   4. default — the production backend when hosted, localhost in local dev
  */
 function resolveApiBase() {
   if (typeof window === "undefined") return "http://localhost:4000";
@@ -36,13 +45,16 @@ function resolveApiBase() {
   } catch {
     /* storage unavailable */
   }
-  return "http://localhost:4000";
+  // No explicit override: default by where the page is served from. On a real
+  // host, talk to the deployed backend; only fall back to localhost in dev.
+  const local = LOCAL_HOSTS.includes(location.hostname);
+  return local ? "http://localhost:4000" : PRODUCTION_API_BASE;
 }
 
 export const API_BASE = resolveApiBase();
 export const API = `${API_BASE}/api`;
 
-export const IS_DEV = ["localhost", "127.0.0.1", "[::1]", ""].includes(
+export const IS_DEV = LOCAL_HOSTS.includes(
   typeof location !== "undefined" ? location.hostname : ""
 );
 
