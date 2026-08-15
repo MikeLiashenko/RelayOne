@@ -55,6 +55,11 @@ export const users = pgTable(
     phone: text("phone"),
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
+    // Privacy. messages/avatar ∈ everyone|contacts|nobody; lastSeen ∈ everyone|nobody.
+    // "contacts" = users you share a chat or group with.
+    privacyMessages: text("privacy_messages").notNull().default("everyone"),
+    privacyLastSeen: text("privacy_last_seen").notNull().default("everyone"),
+    privacyAvatar: text("privacy_avatar").notNull().default("everyone"),
     createdAt,
     updatedAt,
   },

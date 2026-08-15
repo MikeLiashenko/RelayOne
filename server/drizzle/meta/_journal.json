@@ -43,6 +43,13 @@
       "when": 1786812669134,
       "tag": "0005_blue_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786820560934,
+      "tag": "0006_chemical_blonde_phantom",
+      "breakpoints": true
     }
   ]
 }

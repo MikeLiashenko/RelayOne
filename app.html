@@ -440,6 +440,31 @@
         </section>
 
         <section class="settings__section">
+          <h3 class="settings__title">Privacy</h3>
+
+          <span class="field__label">Who can message me</span>
+          <div class="segmented" data-role="privacy-messages">
+            <button type="button" class="segmented__btn" data-priv="messages" data-val="everyone">Everyone</button>
+            <button type="button" class="segmented__btn" data-priv="messages" data-val="contacts">Contacts</button>
+            <button type="button" class="segmented__btn" data-priv="messages" data-val="nobody">Nobody</button>
+          </div>
+
+          <span class="field__label">Last seen &amp; online</span>
+          <div class="segmented" data-role="privacy-lastSeen">
+            <button type="button" class="segmented__btn" data-priv="lastSeen" data-val="everyone">Everyone</button>
+            <button type="button" class="segmented__btn" data-priv="lastSeen" data-val="nobody">Nobody</button>
+          </div>
+
+          <span class="field__label">Who can see my avatar</span>
+          <div class="segmented" data-role="privacy-avatar">
+            <button type="button" class="segmented__btn" data-priv="avatar" data-val="everyone">Everyone</button>
+            <button type="button" class="segmented__btn" data-priv="avatar" data-val="contacts">Contacts</button>
+            <button type="button" class="segmented__btn" data-priv="avatar" data-val="nobody">Nobody</button>
+          </div>
+          <span class="settings__hint" data-role="privacy-hint">Hiding your last seen also hides others’ from you.</span>
+        </section>
+
+        <section class="settings__section">
           <h3 class="settings__title">Storage</h3>
           <div class="settings__row">
             <div class="settings__row-text">

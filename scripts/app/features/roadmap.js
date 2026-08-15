@@ -19,5 +19,5 @@ export const ROADMAP = [
   { icon: "📊", title: "Storage manager", status: "live", desc: "See local cache usage by type and clear it." },
   { icon: "🖥️", title: "Multi-device", status: "live", desc: "One account across browsers & devices, kept in sync in real time." },
   { icon: "🛡️", title: "Security center", status: "live", desc: "See your active sessions and sign out other devices." },
-  { icon: "🚫", title: "Privacy", status: "soon", desc: "Control who can message you, see your avatar and last seen." },
+  { icon: "🚫", title: "Privacy", status: "live", desc: "Control who can message you, and who sees your avatar & last seen." },
 ];

@@ -1566,6 +1566,9 @@ function wireFeatures() {
   $('[data-role="push-toggle"]').addEventListener("click", togglePush);
   $('[data-action="clear-cache"]').addEventListener("click", clearCache);
   $('[data-action="revoke-others"]').addEventListener("click", revokeOtherSessions);
+  $$('[data-priv]').forEach((b) =>
+    b.addEventListener("click", () => setPrivacy(b.dataset.priv, b.dataset.val))
+  );
   $('[data-action="close-settings"]').addEventListener("click", closeSettings);
 
   // Theme controls.
@@ -1606,10 +1609,44 @@ function wireFeatures() {
 function openSettings() {
   syncThemeUI();
   syncPresenceUI();
+  syncPrivacyUI();
   void syncPushUI();
   void syncStorageUI();
   void syncSessionsUI();
   $('[data-role="settings-modal"]').hidden = false;
+}
+
+/* -- Privacy --------------------------------------------------------------- */
+
+const DEFAULT_PRIVACY = { messages: "everyone", lastSeen: "everyone", avatar: "everyone" };
+
+function syncPrivacyUI() {
+  const p = state.me?.privacy || DEFAULT_PRIVACY;
+  $$('[data-priv]').forEach((b) => {
+    b.classList.toggle("is-active", p[b.dataset.priv] === b.dataset.val);
+  });
+}
+
+async function setPrivacy(field, val) {
+  const current = state.me.privacy || DEFAULT_PRIVACY;
+  if (current[field] === val) return;
+  const prev = current[field];
+  // Optimistic.
+  state.me.privacy = { ...current, [field]: val };
+  syncPrivacyUI();
+
+  const r = await api.updateProfile({ privacy: { [field]: val } });
+  if (r.ok && r.data) {
+    state.me = r.data;
+    const s = getSession();
+    if (s) {
+      s.user = r.data;
+      setSession(s);
+    }
+  } else {
+    state.me.privacy = { ...state.me.privacy, [field]: prev }; // revert
+  }
+  syncPrivacyUI();
 }
 
 /* -- Storage manager ------------------------------------------------------- */
@@ -2059,7 +2096,12 @@ function renderUserResults(users) {
 async function startChatWith(user) {
   const r = await api.createDirect(user.id);
   closeNewChat();
-  if (!r.ok) return;
+  if (!r.ok) {
+    if (r.status === 403) {
+      window.alert(r.error?.message || "You can’t start a chat with this person.");
+    }
+    return;
+  }
   const chatId = r.data.id;
   // Refresh list (dedupe means this may be an existing chat) then open.
   await loadChats();

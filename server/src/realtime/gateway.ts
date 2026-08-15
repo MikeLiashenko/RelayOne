@@ -2,6 +2,7 @@ import type { IncomingMessage, Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { resolveSession } from "../auth/sessions";
 import { chatService } from "../services/chatService";
+import { userService } from "../services/userService";
 import { handleCallDisconnect, handleCallEvent } from "./calls";
 import type { ClientEvent, ServerEvent } from "./events";
 import { hub } from "./hub";
@@ -119,8 +120,15 @@ async function broadcastPresence(userId: string, online: boolean): Promise<void>
   // Best-effort: a DB hiccup (or shutdown) during connect/disconnect must not
   // crash the gateway or surface as an unhandled rejection.
   try {
+    // Reciprocal last-seen privacy: a user who hides their status isn't
+    // announced, and users who hide theirs don't receive others' presence.
+    const selfHidden = await userService.lastSeenHiddenSet([userId]);
+    if (selfHidden.has(userId)) return;
     const peers = await chatService.getPeerUserIds(userId);
-    hub.broadcastToUsers(peers, { type: "presence", userId, online });
+    if (peers.length === 0) return;
+    const peerHidden = await userService.lastSeenHiddenSet(peers);
+    const audience = peers.filter((p) => !peerHidden.has(p));
+    hub.broadcastToUsers(audience, { type: "presence", userId, online });
   } catch {
     /* ignore */
   }

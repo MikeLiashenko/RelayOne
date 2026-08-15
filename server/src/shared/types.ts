@@ -12,11 +12,18 @@ export interface PublicUser {
   createdAt: string;
 }
 
-/** The authenticated user's own view — includes contact fields. */
+export interface PrivacySettings {
+  messages: "everyone" | "contacts" | "nobody";
+  lastSeen: "everyone" | "nobody";
+  avatar: "everyone" | "contacts" | "nobody";
+}
+
+/** The authenticated user's own view — includes contact fields + privacy. */
 export interface SelfUser extends PublicUser {
   email: string | null;
   phone: string | null;
   updatedAt: string;
+  privacy: PrivacySettings;
 }
 
 export interface AuthSession {

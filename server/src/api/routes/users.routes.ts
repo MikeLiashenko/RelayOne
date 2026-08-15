@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { getAuth, requireAuth } from "../../auth/middleware";
+import { chatService } from "../../services/chatService";
 import { userService } from "../../services/userService";
 import { AppError } from "../../shared/errors";
-import { toPublicUser, toSelfUser } from "../../shared/serialize";
+import { canSeeAvatar, toPublicUser, toSelfUser } from "../../shared/serialize";
 import { parse } from "../../validation/parse";
 import {
   updateProfileSchema,
@@ -34,7 +35,14 @@ usersRouter.get(
     const { user } = getAuth(req);
     const { q } = parse(userSearchSchema, req.query);
     const results = await userService.search(q, user.id);
-    sendData(res, results.map(toPublicUser));
+    // Avatar privacy: strangers may have hidden their photo.
+    const myPeers = new Set(await chatService.getPeerUserIds(user.id));
+    sendData(
+      res,
+      results.map((r) =>
+        toPublicUser(r, { hideAvatar: !canSeeAvatar(r, user.id, myPeers.has(r.id)) })
+      )
+    );
   })
 );
 
@@ -63,8 +71,15 @@ usersRouter.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const id = parse(z.string().uuid(), req.params.id);
-    const user = await userService.getById(id);
-    if (!user) throw AppError.notFound("User not found.");
-    sendData(res, toPublicUser(user));
+    const { user: viewer } = getAuth(req);
+    const target = await userService.getById(id);
+    if (!target) throw AppError.notFound("User not found.");
+    const isContact =
+      id === viewer.id ||
+      (await chatService.getPeerUserIds(viewer.id)).includes(id);
+    sendData(
+      res,
+      toPublicUser(target, { hideAvatar: !canSeeAvatar(target, viewer.id, isContact) })
+    );
   })
 );

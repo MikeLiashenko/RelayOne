@@ -98,6 +98,13 @@ export const updateProfileSchema = z
     username: usernameSchema.optional(),
     avatarUrl: z.string().url().max(2048).nullable().optional(),
     bio: z.string().trim().max(280).nullable().optional(),
+    privacy: z
+      .object({
+        messages: z.enum(["everyone", "contacts", "nobody"]).optional(),
+        lastSeen: z.enum(["everyone", "nobody"]).optional(),
+        avatar: z.enum(["everyone", "contacts", "nobody"]).optional(),
+      })
+      .optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "No fields to update.");
 

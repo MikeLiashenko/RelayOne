@@ -59,6 +59,77 @@ describe("security center — sessions", () => {
   });
 });
 
+describe("privacy — who can message + avatar visibility", () => {
+  it("enforces message privacy (everyone / contacts / nobody)", async () => {
+    const a = await registerUser(app, { email: "pv_a@relayone.test", username: "pv_a" });
+    const b = await registerUser(app, { email: "pv_b@relayone.test", username: "pv_b" });
+    const c = await registerUser(app, { email: "pv_c@relayone.test", username: "pv_c" });
+
+    // Default (everyone): A can DM B.
+    const ok = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    expect(ok.status).toBe(201);
+
+    // C blocks everyone.
+    await request(app)
+      .patch("/api/users/me")
+      .set(bearer(c.token))
+      .send({ privacy: { messages: "nobody" } });
+    const blocked = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [c.user.id] });
+    expect(blocked.status).toBe(403);
+
+    // C switches to contacts-only: still blocked (A shares no chat with C)…
+    await request(app)
+      .patch("/api/users/me")
+      .set(bearer(c.token))
+      .send({ privacy: { messages: "contacts" } });
+    const stillBlocked = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [c.user.id] });
+    expect(stillBlocked.status).toBe(403);
+
+    // …until they share a group; then A can DM C.
+    await request(app)
+      .post("/api/chats")
+      .set(bearer(b.token))
+      .send({ type: "group", title: "Shared", memberIds: [a.user.id, c.user.id] });
+    const nowOk = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [c.user.id] });
+    expect(nowOk.status).toBe(201);
+  });
+
+  it("hides the avatar of a stranger who set avatar privacy to nobody", async () => {
+    const a = await registerUser(app, { email: "av_a@relayone.test", username: "av_a" });
+    const b = await registerUser(app, { email: "av_b@relayone.test", username: "av_seeker" });
+
+    await request(app)
+      .patch("/api/users/me")
+      .set(bearer(b.token))
+      .send({ avatarUrl: "https://example.com/b.png", privacy: { avatar: "nobody" } });
+
+    // A (a stranger) searches for B → avatar withheld.
+    const search = await request(app)
+      .get("/api/users/search?q=av_seeker")
+      .set(bearer(a.token));
+    const found = search.body.data.find((u: any) => u.id === b.user.id);
+    expect(found).toBeTruthy();
+    expect(found.avatarUrl).toBeNull();
+
+    // B still sees their own avatar.
+    const me = await request(app).get("/api/users/me").set(bearer(b.token));
+    expect(me.body.data.avatarUrl).toBe("https://example.com/b.png");
+    expect(me.body.data.privacy.avatar).toBe("nobody");
+  });
+});
+
 describe("web push — endpoints", () => {
   it("serves the VAPID public key (disabled without a private key in tests)", async () => {
     const r = await request(app).get("/api/push/vapid-public-key");

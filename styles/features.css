@@ -785,3 +785,5 @@
   cursor: pointer;
 }
 .sessions__revoke:hover { border-color: var(--color-danger); }
+
+.settings__hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }

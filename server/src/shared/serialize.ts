@@ -24,12 +24,12 @@ import type {
 
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
 
-export function toPublicUser(u: User): PublicUser {
+export function toPublicUser(u: User, opts?: { hideAvatar?: boolean }): PublicUser {
   return {
     id: u.id,
     username: u.username,
     displayName: u.displayName,
-    avatarUrl: u.avatarUrl,
+    avatarUrl: opts?.hideAvatar ? null : u.avatarUrl,
     bio: u.bio,
     createdAt: u.createdAt.toISOString(),
   };
@@ -41,17 +41,38 @@ export function toSelfUser(u: User): SelfUser {
     email: u.email,
     phone: u.phone,
     updatedAt: u.updatedAt.toISOString(),
+    privacy: {
+      messages: (u.privacyMessages as SelfUser["privacy"]["messages"]) ?? "everyone",
+      lastSeen: (u.privacyLastSeen as SelfUser["privacy"]["lastSeen"]) ?? "everyone",
+      avatar: (u.privacyAvatar as SelfUser["privacy"]["avatar"]) ?? "everyone",
+    },
   };
 }
 
-export function toPublicChat(chat: Chat, members: User[]): PublicChat {
+/**
+ * Whether `viewerId` may see `owner`'s avatar. Within a shared chat everyone is
+ * a "contact", so pass `isContact` accordingly (true for chat member lists).
+ */
+export function canSeeAvatar(owner: User, viewerId: string | undefined, isContact: boolean): boolean {
+  if (owner.id === viewerId) return true;
+  const p = owner.privacyAvatar ?? "everyone";
+  if (p === "nobody") return false;
+  if (p === "contacts") return isContact;
+  return true;
+}
+
+export function toPublicChat(chat: Chat, members: User[], viewerId?: string): PublicChat {
   return {
     id: chat.id,
     type: chat.type,
     title: chat.title,
     createdAt: chat.createdAt.toISOString(),
     updatedAt: chat.updatedAt.toISOString(),
-    members: members.map(toPublicUser),
+    // Chat members share this chat, so they're contacts of each other — only a
+    // strict "nobody" avatar policy hides a member's photo (never from self).
+    members: members.map((m) =>
+      toPublicUser(m, { hideAvatar: !canSeeAvatar(m, viewerId, true) })
+    ),
   };
 }
 

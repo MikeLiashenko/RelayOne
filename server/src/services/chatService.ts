@@ -121,6 +121,8 @@ export const chatService = {
       }
       const found = await this.findExistingDirect(input.creatorId, other);
       if (found) return this.toPublic(found);
+      // No existing chat → the recipient's message-privacy gates a new DM.
+      await this.assertCanMessage(input.creatorId, other);
     }
 
     const [chat] = await db
@@ -241,12 +243,13 @@ export const chatService = {
           .where(and(...unreadConds));
         const unreadCount = Number(unreadRows[0]?.c ?? 0);
 
+        const viewer = members.find((m) => m.id === userId);
         const online = members.some(
-          (m) => m.id !== userId && hub.isOnline(m.id)
+          (m) => m.id !== userId && hub.isOnline(m.id) && lastSeenMutual(viewer, m)
         );
 
         return {
-          ...toPublicChat(chat, members),
+          ...toPublicChat(chat, members, userId),
           lastMessage: last
             ? {
                 id: last.id,
@@ -275,14 +278,22 @@ export const chatService = {
       .from(chatMembers)
       .where(eq(chatMembers.chatId, chatId));
     const members = await this.getMembers(chatId);
+    const viewer = members.find((m) => m.id === userId);
+    const memberById = new Map(members.map((m) => [m.id, m]));
     return {
-      ...toPublicChat(chat, members),
-      memberStates: rows.map((r) => ({
-        userId: r.userId,
-        lastReadMessageId: r.lastReadMessageId,
-        lastReadAt: r.lastReadAt ? r.lastReadAt.toISOString() : null,
-        online: hub.isOnline(r.userId),
-      })),
+      ...toPublicChat(chat, members, userId),
+      memberStates: rows.map((r) => {
+        const member = memberById.get(r.userId);
+        const online =
+          hub.isOnline(r.userId) &&
+          (r.userId === userId || (member ? lastSeenMutual(viewer, member) : false));
+        return {
+          userId: r.userId,
+          lastReadMessageId: r.lastReadMessageId,
+          lastReadAt: r.lastReadAt ? r.lastReadAt.toISOString() : null,
+          online,
+        };
+      }),
     };
   },
 
@@ -297,11 +308,41 @@ export const chatService = {
       .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId)));
   },
 
-  async toPublic(chat: Chat): Promise<PublicChat> {
+  async toPublic(chat: Chat, viewerId?: string): Promise<PublicChat> {
     const members = await this.getMembers(chat.id);
-    return toPublicChat(chat, members);
+    return toPublicChat(chat, members, viewerId);
+  },
+
+  /** Throws unless `senderId` may start a new DM with `recipientId`. */
+  async assertCanMessage(senderId: string, recipientId: string): Promise<void> {
+    const [recipient] = await getDb()
+      .select()
+      .from(users)
+      .where(eq(users.id, recipientId))
+      .limit(1);
+    const policy = recipient?.privacyMessages ?? "everyone";
+    if (policy === "everyone") return;
+    if (policy === "nobody") {
+      throw AppError.forbidden("This person isn’t accepting new messages.");
+    }
+    // "contacts": allowed only if they already share a chat or group.
+    const peers = await this.getPeerUserIds(recipientId);
+    if (!peers.includes(senderId)) {
+      throw AppError.forbidden("You can only message people you already share a chat with.");
+    }
   },
 };
+
+/**
+ * Reciprocal last-seen visibility (Telegram-style): a user who hides their
+ * online status also can't see others'. So an online flag is shown only when
+ * *both* the viewer and the other user allow it.
+ */
+function lastSeenMutual(viewer: User | undefined, other: User): boolean {
+  const viewerHides = (viewer?.privacyLastSeen ?? "everyone") === "nobody";
+  const otherHides = (other.privacyLastSeen ?? "everyone") === "nobody";
+  return !viewerHides && !otherHides;
+}
 
 function summaryTime(s: ChatSummary): number {
   return Date.parse(s.lastMessage?.createdAt ?? s.updatedAt);
