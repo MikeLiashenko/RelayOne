@@ -6,6 +6,7 @@ import {
   chats,
   messageReactions,
   messages,
+  users,
   type Attachment,
   type Message,
   type MessageReaction,
@@ -16,6 +17,7 @@ import type { PublicMessage } from "../shared/types";
 import { hub } from "../realtime/hub";
 import { chatService } from "./chatService";
 import { notificationService } from "./notificationService";
+import { pushService } from "./pushService";
 
 /**
  * Messages: create, list, edit, soft-delete, react. Every operation is
@@ -175,19 +177,53 @@ export const messageService = {
 
     // Notify + broadcast to everyone in the chat.
     hub.broadcastToUsers(memberIds, { type: "message.new", message: full! });
+    const others = memberIds.filter((id) => id !== senderId);
     await Promise.all(
-      memberIds
-        .filter((id) => id !== senderId)
-        .map((id) =>
-          notificationService.create(id, {
-            type: "message",
-            chatId,
-            messageId: message!.id,
-          })
-        )
+      others.map((id) =>
+        notificationService.create(id, {
+          type: "message",
+          chatId,
+          messageId: message!.id,
+        })
+      )
     );
 
+    // Web push for members who aren't currently connected (tab/app closed).
+    const offline = others.filter((id) => !hub.isOnline(id));
+    if (offline.length > 0) void this.pushOffline(offline, chatId, senderId, full!);
+
     return full!;
+  },
+
+  /** Fire-and-forget web-push to offline recipients of a new message. */
+  async pushOffline(
+    userIds: string[],
+    chatId: string,
+    senderId: string,
+    msg: PublicMessage
+  ): Promise<void> {
+    if (!pushService.isEnabled()) return;
+    const db = getDb();
+    const [[sender], [chat]] = await Promise.all([
+      db.select().from(users).where(eq(users.id, senderId)).limit(1),
+      db.select().from(chats).where(eq(chats.id, chatId)).limit(1),
+    ]);
+    const senderName = sender?.displayName || "Someone";
+    const isGroup = Boolean(chat && chat.type !== "direct");
+    const raw = msg.content
+      ? msg.content
+      : msg.attachments?.length
+        ? "📎 Attachment"
+        : "New message";
+    const preview = raw.length > 120 ? raw.slice(0, 117) + "…" : raw;
+    const payload = {
+      title: isGroup ? chat?.title || "Group" : senderName,
+      body: isGroup ? `${senderName}: ${preview}` : preview,
+      chatId,
+      tag: chatId,
+      url: `app.html?chat=${chatId}`,
+    };
+    for (const id of userIds) void pushService.sendToUser(id, payload);
   },
 
   async edit(

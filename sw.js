@@ -70,3 +70,49 @@ self.addEventListener("fetch", (event) => {
       })
   );
 });
+
+/* ==========================================================================
+   Web Push — show notifications when the tab/app is closed, and focus the
+   right chat when one is clicked.
+   ========================================================================== */
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: "RelayOne", body: event.data ? event.data.text() : "" };
+  }
+  const title = data.title || "RelayOne";
+  const options = {
+    body: data.body || "",
+    icon: "assets/icons/icon-192.png",
+    badge: "assets/icons/icon-192.png",
+    tag: data.tag || undefined, // collapse repeat notifications from one chat
+    renotify: Boolean(data.tag),
+    data: { url: data.url || "app.html", chatId: data.chatId || null },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || "app.html", self.registration.scope).href;
+  const chatId = event.notification.data?.chatId || null;
+
+  event.waitUntil(
+    (async () => {
+      const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Focus an already-open RelayOne tab and tell it which chat to open.
+      for (const client of clientList) {
+        if (client.url.startsWith(self.registration.scope)) {
+          await client.focus();
+          if (chatId) client.postMessage({ type: "open-chat", chatId });
+          return;
+        }
+      }
+      // Otherwise open a fresh window at the chat.
+      await self.clients.openWindow(targetUrl);
+    })()
+  );
+});

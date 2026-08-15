@@ -697,3 +697,91 @@
   padding: var(--space-2);
 }
 .search-empty { padding: var(--space-4) var(--space-2); text-align: center; }
+
+/* ==========================================================================
+   ⚙️ Settings rows + toggle switch (Notifications, etc.)
+   ========================================================================== */
+.settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.settings__row-text { display: flex; flex-direction: column; min-width: 0; }
+.settings__row-name { font-weight: var(--fw-medium); color: var(--text-primary); }
+.settings__row-sub { font-size: 13px; color: var(--text-muted); }
+
+.toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-field);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.toggle[aria-checked="true"] { background: var(--color-blue); }
+.toggle:disabled { opacity: 0.5; cursor: default; }
+.toggle__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.toggle[aria-checked="true"] .toggle__knob { transform: translateX(18px); }
+
+/* ==========================================================================
+   📊 Storage manager + 🛡️ Security center (sessions)
+   ========================================================================== */
+.settings__btn-sm {
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  background: var(--surface-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: border-color var(--dur-fast) var(--ease-soft);
+}
+.settings__btn-sm:hover { border-color: var(--border-strong); }
+.settings__btn-sm--wide { width: 100%; margin-top: var(--space-2); }
+
+.sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sessions__loading { color: var(--text-muted); font-size: 0.875rem; padding: 4px 0; }
+.sessions__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.sessions__item.is-current { border-color: var(--color-blue); }
+.sessions__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-muted); flex: 0 0 auto; }
+.sessions__item.is-current .sessions__dot { background: var(--color-success); }
+.sessions__meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sessions__name { font-weight: var(--fw-medium); font-size: 0.875rem; }
+.sessions__sub { font-size: 0.75rem; color: var(--text-muted); }
+.sessions__badge { font-size: 0.6875rem; font-weight: var(--fw-semibold); color: var(--color-blue); flex: 0 0 auto; }
+.sessions__revoke {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  font: inherit; font-size: 0.75rem; font-weight: var(--fw-medium);
+  color: var(--color-danger);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.sessions__revoke:hover { border-color: var(--color-danger); }

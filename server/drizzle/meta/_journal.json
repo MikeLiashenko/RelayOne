@@ -36,6 +36,13 @@
       "when": 1786795783213,
       "tag": "0004_daffy_peter_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786812669134,
+      "tag": "0005_blue_kronos",
+      "breakpoints": true
     }
   ]
 }

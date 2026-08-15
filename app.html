@@ -426,6 +426,39 @@
           </div>
         </section>
 
+        <section class="settings__section">
+          <h3 class="settings__title">Notifications</h3>
+          <div class="settings__row">
+            <div class="settings__row-text">
+              <span class="settings__row-name">Push notifications</span>
+              <span class="settings__row-sub" data-role="push-sub">Get notified even when RelayOne is closed.</span>
+            </div>
+            <button type="button" class="toggle" data-role="push-toggle" role="switch" aria-checked="false" disabled>
+              <span class="toggle__knob"></span>
+            </button>
+          </div>
+        </section>
+
+        <section class="settings__section">
+          <h3 class="settings__title">Storage</h3>
+          <div class="settings__row">
+            <div class="settings__row-text">
+              <span class="settings__row-name">Local cache</span>
+              <span class="settings__row-sub" data-role="storage-usage">Calculating…</span>
+            </div>
+            <button class="settings__btn-sm" type="button" data-action="clear-cache">Clear</button>
+          </div>
+        </section>
+
+        <section class="settings__section">
+          <h3 class="settings__title">Security</h3>
+          <span class="field__label">Active sessions</span>
+          <ul class="sessions" data-role="sessions"></ul>
+          <button class="settings__btn-sm settings__btn-sm--wide" type="button" data-action="revoke-others">
+            Sign out all other devices
+          </button>
+        </section>
+
         <button class="settings__link" type="button" data-action="open-whatsnew">🚀 What's new in RelayOne</button>
       </div>
     </div>

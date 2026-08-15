@@ -318,6 +318,31 @@ export const storageObjects = pgTable("storage_objects", {
 });
 
 /* ==========================================================================
+   push_subscriptions — Web Push (VAPID) endpoints per device
+
+   Lets RelayOne deliver notifications when the tab/app is closed. One row per
+   browser push subscription; `endpoint` is globally unique (re-subscribing
+   just moves it to the current user). Stale endpoints are pruned on 404/410.
+   ========================================================================== */
+
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt,
+  },
+  (t) => ({
+    byUser: index("push_subscriptions_user_id_idx").on(t.userId),
+  })
+);
+
+/* ==========================================================================
    notifications
    ========================================================================== */
 

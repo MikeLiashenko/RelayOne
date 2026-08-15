@@ -49,6 +49,18 @@ const schema = z.object({
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
 
+  // Web Push (VAPID). The public key is safe to ship to the browser; the
+  // private key is a secret and enables push only when set (otherwise push is a
+  // no-op, so local dev works without it). These must be a matching pair —
+  // generate with `npx web-push generate-vapid-keys`.
+  VAPID_PUBLIC_KEY: z
+    .string()
+    .default(
+      "BCT_PZKRgNK_4aM_2EeWnESbzv4Dlg1qT0E_MZ5oORMQSnCVe9wry5Q-9kjCwTau_4PjoHliNaHhGJcDCHOcqG0"
+    ),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default("mailto:notify@relayone.app"),
+
   // Routes the DB layer at an in-process PGlite instance (tests always; and an
   // optional zero-setup local dev mode that needs no external Postgres).
   DB_CLIENT: z.enum(["postgres", "pglite"]).default("postgres"),

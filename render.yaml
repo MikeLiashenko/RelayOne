@@ -36,6 +36,10 @@ services:
       # survive restarts (Render's free-tier disk is ephemeral).
       - key: STORAGE_PROVIDER
         value: db
+      # Web Push: the public key ships in code; paste the matching PRIVATE key
+      # here to enable push (generate a pair with `npx web-push generate-vapid-keys`).
+      - key: VAPID_PRIVATE_KEY
+        sync: false
       - key: CORS_ORIGIN
         value: https://mikeliashenko.github.io
       - key: STORAGE_PUBLIC_BASE_URL

@@ -46,4 +46,9 @@ export const api = {
 
   // Calls — ICE (STUN/TURN) configuration for WebRTC.
   getIceServers: () => apiFetch("/calls/ice-servers"),
+
+  // Security center — active sessions.
+  listSessions: () => apiFetch("/sessions"),
+  revokeSession: (id) => apiFetch(`/sessions/${id}`, { method: "DELETE" }),
+  revokeOtherSessions: () => apiFetch("/sessions/revoke-others", { method: "POST" }),
 };

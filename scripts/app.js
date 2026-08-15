@@ -9,6 +9,7 @@ import { api } from "./app/api.js";
 import { createRealtime } from "./app/realtime.js";
 import { createCalls } from "./app/calls/index.js";
 import { createViewer } from "./app/viewer.js";
+import { push } from "./app/push.js";
 import { ACCENTS, getAccent, getThemePref, initTheme, setAccent, setTheme } from "./app/features/theme.js";
 import { createFolders } from "./app/features/folders.js";
 import { ROADMAP } from "./app/features/roadmap.js";
@@ -90,7 +91,34 @@ const DRAFTS_KEY = "relayone.drafts";
     calls?.destroy();
     rt?.stop();
   });
+
+  // Open a chat when arriving from a push notification (?chat=… or a message
+  // posted by the service worker after focusing an existing tab).
+  openChatFromQuery();
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data?.type === "open-chat" && e.data.chatId) openChatSafely(e.data.chatId);
+    });
+  }
 })();
+
+/** Open a chat by id if it's in the user's list (used by push deep-links). */
+async function openChatSafely(chatId) {
+  if (!state.chats.some((c) => c.id === chatId)) await loadChats();
+  if (state.chats.some((c) => c.id === chatId)) openChat(chatId);
+}
+
+function openChatFromQuery() {
+  try {
+    const id = new URLSearchParams(location.search).get("chat");
+    if (!id) return;
+    // Clean the URL so a refresh doesn't keep reopening it.
+    history.replaceState(null, "", location.pathname);
+    openChatSafely(id);
+  } catch {
+    /* ignore */
+  }
+}
 
 /* -- Sidebar / me ---------------------------------------------------------- */
 
@@ -1535,6 +1563,9 @@ function wireFeatures() {
   $$('[data-action="open-whatsnew"]').forEach((b) => b.addEventListener("click", openWhatsNew));
   $('[data-action="close-whatsnew"]').addEventListener("click", closeWhatsNew);
   $('[data-action="open-settings"]').addEventListener("click", openSettings);
+  $('[data-role="push-toggle"]').addEventListener("click", togglePush);
+  $('[data-action="clear-cache"]').addEventListener("click", clearCache);
+  $('[data-action="revoke-others"]').addEventListener("click", revokeOtherSessions);
   $('[data-action="close-settings"]').addEventListener("click", closeSettings);
 
   // Theme controls.
@@ -1575,7 +1606,139 @@ function wireFeatures() {
 function openSettings() {
   syncThemeUI();
   syncPresenceUI();
+  void syncPushUI();
+  void syncStorageUI();
+  void syncSessionsUI();
   $('[data-role="settings-modal"]').hidden = false;
+}
+
+/* -- Storage manager ------------------------------------------------------- */
+
+async function syncStorageUI() {
+  const el = $('[data-role="storage-usage"]');
+  if (!el) return;
+  try {
+    if (navigator.storage?.estimate) {
+      const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+      el.textContent = quota
+        ? `${humanSize(usage)} used of ${humanSize(quota)} available`
+        : `${humanSize(usage)} used`;
+    } else {
+      el.textContent = "Storage info isn’t available in this browser.";
+    }
+  } catch {
+    el.textContent = "Couldn’t read storage usage.";
+  }
+}
+
+async function clearCache() {
+  const el = $('[data-role="storage-usage"]');
+  try {
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    if (el) el.textContent = "Cache cleared. Reloading…";
+    // Reload so the service worker re-caches a fresh shell.
+    setTimeout(() => location.reload(), 600);
+  } catch {
+    if (el) el.textContent = "Couldn’t clear the cache.";
+  }
+}
+
+/* -- Security center (sessions) -------------------------------------------- */
+
+async function syncSessionsUI() {
+  const listEl = $('[data-role="sessions"]');
+  if (!listEl) return;
+  clear(listEl);
+  listEl.append(el("li", { class: "sessions__loading" }, "Loading…"));
+  const r = await api.listSessions();
+  clear(listEl);
+  if (!r.ok || !r.data?.length) {
+    listEl.append(el("li", { class: "sessions__loading" }, "No active sessions."));
+    return;
+  }
+  for (const s of r.data) {
+    const meta = s.current
+      ? "This device · active now"
+      : `Active ${timeRelative(s.lastUsedAt)} · since ${timeRelative(s.createdAt)}`;
+    listEl.append(
+      el(
+        "li",
+        { class: "sessions__item" + (s.current ? " is-current" : "") },
+        el("span", { class: "sessions__dot" }),
+        el(
+          "div",
+          { class: "sessions__meta" },
+          el("span", { class: "sessions__name" }, s.current ? "Current session" : "Other device"),
+          el("span", { class: "sessions__sub" }, meta)
+        ),
+        s.current
+          ? el("span", { class: "sessions__badge" }, "This device")
+          : el("button", {
+              class: "sessions__revoke",
+              type: "button",
+              onClick: () => revokeSessionById(s.id),
+            }, "Sign out")
+      )
+    );
+  }
+}
+
+async function revokeSessionById(id) {
+  const r = await api.revokeSession(id);
+  if (r.ok) syncSessionsUI();
+}
+
+async function revokeOtherSessions() {
+  const r = await api.revokeOtherSessions();
+  if (r.ok) syncSessionsUI();
+}
+
+/** Reflect the current push state onto the settings toggle. */
+async function syncPushUI() {
+  const toggle = $('[data-role="push-toggle"]');
+  const sub = $('[data-role="push-sub"]');
+  if (!toggle) return;
+  const st = await push.status();
+  if (!st.supported) {
+    toggle.disabled = true;
+    toggle.setAttribute("aria-checked", "false");
+    sub.textContent = "This browser doesn’t support push notifications.";
+    return;
+  }
+  if (!st.available) {
+    toggle.disabled = true;
+    toggle.setAttribute("aria-checked", "false");
+    sub.textContent = "Push isn’t configured on the server yet.";
+    return;
+  }
+  if (st.permission === "denied") {
+    toggle.disabled = true;
+    toggle.setAttribute("aria-checked", "false");
+    sub.textContent = "Notifications are blocked in your browser settings.";
+    return;
+  }
+  toggle.disabled = false;
+  toggle.setAttribute("aria-checked", String(st.subscribed));
+  sub.textContent = st.subscribed
+    ? "On — you’ll get notified even when RelayOne is closed."
+    : "Get notified even when RelayOne is closed.";
+}
+
+async function togglePush() {
+  const toggle = $('[data-role="push-toggle"]');
+  const on = toggle.getAttribute("aria-checked") === "true";
+  toggle.disabled = true;
+  try {
+    if (on) await push.disable();
+    else await push.enable();
+  } catch (err) {
+    $('[data-role="push-sub"]').textContent = err?.message || "Couldn’t change notifications.";
+  } finally {
+    await syncPushUI();
+  }
 }
 function closeSettings() {
   $('[data-role="settings-modal"]').hidden = true;

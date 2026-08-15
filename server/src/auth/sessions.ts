@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, ne } from "drizzle-orm";
 import { env } from "../config/env";
 import { getDb } from "../db";
 import { devices, sessions, users, type Session, type User } from "../db/schema";
@@ -95,4 +95,51 @@ export async function revokeAllSessionsForUser(userId: string): Promise<void> {
     .update(sessions)
     .set({ revokedAt: new Date() })
     .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+}
+
+/** Active (not revoked, not expired) sessions for a user, most-recent first. */
+export async function listActiveSessions(userId: string): Promise<Session[]> {
+  return getDb()
+    .select()
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        isNull(sessions.revokedAt),
+        gt(sessions.expiresAt, new Date())
+      )
+    )
+    .orderBy(desc(sessions.lastUsedAt));
+}
+
+/** Revoke one session, but only if it belongs to `userId`. Returns true if it did. */
+export async function revokeSessionForUser(
+  sessionId: string,
+  userId: string
+): Promise<boolean> {
+  const rows = await getDb()
+    .update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt))
+    )
+    .returning({ id: sessions.id });
+  return rows.length > 0;
+}
+
+/** Revoke every active session for a user except `keepSessionId`. */
+export async function revokeOtherSessions(
+  userId: string,
+  keepSessionId: string
+): Promise<void> {
+  await getDb()
+    .update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        ne(sessions.id, keepSessionId),
+        isNull(sessions.revokedAt)
+      )
+    );
 }
