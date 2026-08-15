@@ -1,8 +1,11 @@
 # One-click deploy for RelayOne on Render (Blueprint).
 #
-# In Render: New + → Blueprint → pick the RelayOne repo → Apply.
-# This creates BOTH a free Postgres database and the API web service, and wires
-# them together automatically — no manual environment setup needed.
+# The Render web service is free indefinitely (sleeps when idle). Bring your own
+# free Postgres (Neon is permanently free): create a Neon project, copy its
+# connection string, and paste it when Render's Blueprint asks for DATABASE_URL.
+#
+# In Render: New + → Blueprint → pick the RelayOne repo → Apply →
+#   paste DATABASE_URL (your Neon "postgresql://…?sslmode=require" string).
 #
 # After it's live:
 #   1. Open your frontend once with the API URL:
@@ -10,14 +13,8 @@
 #   2. (Optional, for file attachments) set STORAGE_PUBLIC_BASE_URL to
 #        https://<service>.onrender.com/uploads
 #
-# Note: free tier sleeps when idle (first request ~30s). NODE_ENV=development
-# shows the OTP code in the UI so you can sign in without an email/SMS provider
-# (fine for a personal demo).
-
-databases:
-  - name: relayone-db
-    plan: free
-    region: frankfurt
+# NODE_ENV=development shows the OTP code in the UI so you can sign in without an
+# email/SMS provider (fine for a personal demo).
 
 services:
   - type: web
@@ -34,9 +31,7 @@ services:
       - key: DB_CLIENT
         value: postgres
       - key: DATABASE_URL
-        fromDatabase:
-          name: relayone-db
-          property: connectionString
+        sync: false
       - key: CORS_ORIGIN
         value: https://mikeliashenko.github.io
       - key: STORAGE_PUBLIC_BASE_URL
