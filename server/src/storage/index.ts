@@ -1,4 +1,5 @@
 import { env } from "../config/env";
+import { DbStorageProvider } from "./dbStorageProvider";
 import { LocalStorageProvider } from "./localStorageProvider";
 import type { StorageProvider } from "./storageProvider";
 
@@ -8,6 +9,10 @@ let provider: StorageProvider | null = null;
 export function getStorage(): StorageProvider {
   if (!provider) {
     switch (env.STORAGE_PROVIDER) {
+      case "db":
+        // Durable: bytes live in Postgres, surviving restarts/redeploys.
+        provider = new DbStorageProvider();
+        break;
       case "local":
       default:
         provider = new LocalStorageProvider();

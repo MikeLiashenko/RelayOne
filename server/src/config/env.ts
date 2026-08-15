@@ -21,7 +21,7 @@ const schema = z.object({
   VERIFICATION_CODE_TTL_MINUTES: z.coerce.number().int().positive().default(10),
   VERIFICATION_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
 
-  STORAGE_PROVIDER: z.enum(["local"]).default("local"),
+  STORAGE_PROVIDER: z.enum(["local", "db"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default("./var/uploads"),
   // Public base for uploaded files. If unset, derive it from the platform's
   // external URL (Render injects RENDER_EXTERNAL_URL automatically) so avatars

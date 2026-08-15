@@ -300,6 +300,24 @@ export const attachments = pgTable(
 );
 
 /* ==========================================================================
+   storage_objects — durable object bytes (avatars, attachments)
+
+   The `db` storage provider keeps file bytes here instead of the local disk,
+   which is ephemeral on hosts like Render's free tier. Bytes are stored as
+   base64 text for portability across the postgres.js and PGlite drivers.
+   Fine for small files (avatars); large media would be better on real object
+   storage (S3/R2), which the StorageProvider interface already allows.
+   ========================================================================== */
+
+export const storageObjects = pgTable("storage_objects", {
+  key: text("key").primaryKey(),
+  contentType: text("content_type").notNull(),
+  data: text("data").notNull(), // base64-encoded bytes
+  sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+  createdAt,
+});
+
+/* ==========================================================================
    notifications
    ========================================================================== */
 

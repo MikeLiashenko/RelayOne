@@ -32,6 +32,10 @@ services:
         value: postgres
       - key: DATABASE_URL
         sync: false
+      # Durable file storage: keep avatar/attachment bytes in Postgres so they
+      # survive restarts (Render's free-tier disk is ephemeral).
+      - key: STORAGE_PROVIDER
+        value: db
       - key: CORS_ORIGIN
         value: https://mikeliashenko.github.io
       - key: STORAGE_PUBLIC_BASE_URL
