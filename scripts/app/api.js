@@ -33,6 +33,7 @@ export const api = {
   linkPreview: (url) => apiFetch(`/link-preview?url=${encodeURIComponent(url)}`),
 
   searchUsers: (q) => apiFetch(`/users/search?q=${encodeURIComponent(q)}`),
+  searchMessages: (q) => apiFetch(`/messages/search?q=${encodeURIComponent(q)}`),
   createChat: (body) => apiFetch("/chats", { method: "POST", body }),
   createDirect: (otherUserId) =>
     apiFetch("/chats", { method: "POST", body: { type: "direct", memberIds: [otherUserId] } }),

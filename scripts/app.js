@@ -141,8 +141,7 @@ function wireStaticUI() {
   });
 
   $('[data-role="chat-search"]').addEventListener("input", (e) => {
-    state.filter = e.target.value.trim().toLowerCase();
-    renderChatList();
+    onSearchInput(e.target.value);
   });
 
   $('[data-action="close-new-chat"]').addEventListener("click", closeNewChat);
@@ -322,9 +321,187 @@ function avatarStyle(seed) {
   return `background: linear-gradient(135deg, hsl(${h} 80% 55%), hsl(${(h + 40) % 360} 80% 50%));`;
 }
 
+/* -- Global search (chats + people + messages) ----------------------------- */
+
+let searchSeq = 0;
+let searchTimer = null;
+const searchData = { q: "", chats: [], users: null, messages: null }; // null = loading
+
+function onSearchInput(raw) {
+  const q = raw.trim();
+  state.filter = q.toLowerCase();
+  const searching = q.length > 0;
+  setSearchMode(searching);
+
+  if (!searching) {
+    clearTimeout(searchTimer);
+    clear($('[data-role="search-results"]'));
+    renderChatList();
+    return;
+  }
+
+  // Instant local part: matching chats. People + message text load debounced.
+  searchData.q = q;
+  searchData.chats = matchChats(q);
+  searchData.users = null;
+  searchData.messages = null;
+  renderSearchResults();
+
+  clearTimeout(searchTimer);
+  const seq = ++searchSeq;
+  searchTimer = setTimeout(() => runRemoteSearch(q, seq), 250);
+}
+
+/** Swap the sidebar between its normal browsing list and search results. */
+function setSearchMode(active) {
+  $('[data-role="search-results"]').hidden = !active;
+  const foldersEl = $('[data-role="folders"]');
+  if (foldersEl) foldersEl.hidden = active;
+  const saved = $(".saved-entry");
+  if (saved) saved.hidden = active;
+  $('[data-role="chat-list"]').hidden = active;
+  if (active) $('[data-role="chats-empty"]').hidden = true;
+}
+
+function matchChats(q) {
+  const lc = q.toLowerCase();
+  return state.chats
+    .filter((chat) => {
+      if (chat.type === "saved") return false;
+      const { name } = chatDisplay(chat);
+      const last = chat.lastMessage?.content ?? "";
+      return name.toLowerCase().includes(lc) || last.toLowerCase().includes(lc);
+    })
+    .slice(0, 8);
+}
+
+async function runRemoteSearch(q, seq) {
+  const [users, msgs] = await Promise.all([
+    api.searchUsers(q),
+    api.searchMessages(q),
+  ]);
+  if (seq !== searchSeq) return; // a newer keystroke superseded this one
+  searchData.users = users.ok ? users.data : [];
+  searchData.messages = msgs.ok ? msgs.data : [];
+  renderSearchResults();
+}
+
+function renderSearchResults() {
+  const wrap = $('[data-role="search-results"]');
+  clear(wrap);
+
+  if (searchData.chats.length) {
+    wrap.append(searchGroup("Chats", searchData.chats.map(chatResultNode)));
+  }
+
+  if (searchData.users === null) {
+    wrap.append(searchGroup("People", [searchLoadingNode()]));
+  } else if (searchData.users.length) {
+    wrap.append(searchGroup("People", searchData.users.map(personResultNode)));
+  }
+
+  if (searchData.messages === null) {
+    wrap.append(searchGroup("Messages", [searchLoadingNode()]));
+  } else if (searchData.messages.length) {
+    wrap.append(searchGroup("Messages", searchData.messages.map(messageResultNode)));
+  }
+
+  const settled = searchData.users !== null && searchData.messages !== null;
+  const empty =
+    !searchData.chats.length &&
+    (searchData.users?.length ?? 0) === 0 &&
+    (searchData.messages?.length ?? 0) === 0;
+  if (settled && empty) {
+    wrap.append(el("div", { class: "search-empty" }, `No results for “${searchData.q}”.`));
+  }
+}
+
+function searchGroup(title, items) {
+  return el(
+    "div",
+    { class: "search-group" },
+    el("div", { class: "search-group__title" }, title),
+    el("ul", { class: "search-group__list" }, ...items)
+  );
+}
+
+function searchLoadingNode() {
+  return el("li", { class: "search-loading" }, "Searching…");
+}
+
+function chatResultNode(chat) {
+  const { name, avatarUrl, peerId } = chatDisplay(chat);
+  const online = peerId ? state.presence.get(peerId) : false;
+  const last = chat.lastMessage;
+  const preview = last
+    ? last.deletedAt
+      ? "Message deleted"
+      : last.content ?? "Attachment"
+    : "No messages yet";
+  const avatar = el("div", { class: "search-item__avatar" });
+  renderAvatar(avatar, { name, avatarUrl, online });
+  return el(
+    "li",
+    { class: "search-item", onClick: () => openSearchResult(() => openChat(chat.id)) },
+    avatar,
+    el(
+      "div",
+      { class: "search-item__body" },
+      el("span", { class: "search-item__name" }, name),
+      el("span", { class: "search-item__sub" }, preview)
+    )
+  );
+}
+
+function personResultNode(u) {
+  const avatar = el("div", { class: "search-item__avatar" });
+  renderAvatar(avatar, { name: u.displayName, avatarUrl: u.avatarUrl });
+  return el(
+    "li",
+    { class: "search-item", onClick: () => openSearchResult(() => startChatWith(u)) },
+    avatar,
+    el(
+      "div",
+      { class: "search-item__body" },
+      el("span", { class: "search-item__name" }, u.displayName),
+      el("span", { class: "search-item__sub" }, `@${u.username}`)
+    )
+  );
+}
+
+function messageResultNode(m) {
+  const chat = state.chats.find((c) => c.id === m.chatId);
+  const disp = chat ? chatDisplay(chat) : { name: "Chat", avatarUrl: null };
+  const avatar = el("div", { class: "search-item__avatar" });
+  renderAvatar(avatar, { name: disp.name, avatarUrl: disp.avatarUrl });
+  return el(
+    "li",
+    { class: "search-item", onClick: () => openSearchResult(() => openChat(m.chatId, m.id)) },
+    avatar,
+    el(
+      "div",
+      { class: "search-item__body" },
+      el("span", { class: "search-item__name" }, disp.name),
+      el("span", { class: "search-item__sub" }, m.content ?? "")
+    )
+  );
+}
+
+/** Clear the search box, leave search mode, then run the chosen action. */
+function openSearchResult(action) {
+  const input = $('[data-role="chat-search"]');
+  input.value = "";
+  state.filter = "";
+  clearTimeout(searchTimer);
+  searchSeq++;
+  clear($('[data-role="search-results"]'));
+  setSearchMode(false);
+  action();
+}
+
 /* -- Open a chat ----------------------------------------------------------- */
 
-async function openChat(id) {
+async function openChat(id, highlightId = null) {
   state.activeId = id;
   state.reply = null;
   state.editing = null;
@@ -366,6 +543,28 @@ async function openChat(id) {
   renderMessages();
   markReadLatest();
   loadPins(id);
+  if (highlightId) revealMessage(highlightId);
+}
+
+/**
+ * Scroll to and flash a message, loading older history (bounded) until it's
+ * found — used when jumping to a global-search result that may be far back.
+ */
+async function revealMessage(messageId) {
+  const chatId = state.activeId;
+  const tryJump = () => {
+    if (state.msgNodes.has(messageId)) {
+      jumpToMessage(messageId);
+      return true;
+    }
+    return false;
+  };
+  if (tryJump()) return;
+  for (let i = 0; i < 10 && state.hasMoreOlder; i++) {
+    if (state.activeId !== chatId) return; // user switched chats
+    await loadOlder();
+    if (tryJump()) return;
+  }
 }
 
 function renderHeader() {

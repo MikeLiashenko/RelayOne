@@ -10,6 +10,17 @@ export const messagesRouter = Router();
 messagesRouter.use(requireAuth);
 
 const idParam = z.string().uuid();
+const searchQuerySchema = z.object({ q: z.string().trim().min(1).max(100) });
+
+/** Global search across the caller's chats, by message text. */
+messagesRouter.get(
+  "/search",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const { q } = parse(searchQuerySchema, req.query);
+    sendData(res, await messageService.search(user.id, q, { limit: 20 }));
+  })
+);
 
 /** Edit your own message. */
 messagesRouter.patch(

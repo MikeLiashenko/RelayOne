@@ -1,7 +1,8 @@
-import { and, desc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   attachments,
+  chatMembers,
   chats,
   messageReactions,
   messages,
@@ -70,6 +71,46 @@ export const messageService = {
 
     // Return chronological (oldest → newest).
     return this.hydrate(rows.reverse());
+  },
+
+  /**
+   * Global message search across every chat the user belongs to. Matches
+   * message text case-insensitively; deleted messages are excluded. Returns
+   * newest matches first (each carries its chatId so the client can jump to it).
+   */
+  async search(
+    userId: string,
+    q: string,
+    opts: { limit: number }
+  ): Promise<PublicMessage[]> {
+    const term = q.trim();
+    if (!term) return [];
+    const db = getDb();
+
+    const memberRows = await db
+      .select({ chatId: chatMembers.chatId })
+      .from(chatMembers)
+      .where(eq(chatMembers.userId, userId));
+    const chatIds = memberRows.map((r) => r.chatId);
+    if (chatIds.length === 0) return [];
+
+    // Escape LIKE wildcards so a literal % or _ in the query isn't a wildcard.
+    const pattern = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          inArray(messages.chatId, chatIds),
+          isNull(messages.deletedAt),
+          ilike(messages.content, pattern)
+        )
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(opts.limit);
+
+    return this.hydrate(rows);
   },
 
   async getForUser(messageId: string, userId: string): Promise<Message> {

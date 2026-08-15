@@ -127,4 +127,47 @@ describe("chats, messages & authorization", () => {
     expect(edit.body.data.content).toBe("edited");
     expect(edit.body.data.editedAt).toBeTruthy();
   });
+
+  it("searches messages across the caller's chats, scoped to membership", async () => {
+    const a = await registerUser(app, { email: "s1@relayone.test", username: "search_a" });
+    const b = await registerUser(app, { email: "s2@relayone.test", username: "search_b" });
+    const c = await registerUser(app, { email: "s3@relayone.test", username: "search_c" });
+
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(a.token))
+      .send({ content: "let's meet for pizza tonight" });
+    await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(b.token))
+      .send({ content: "sounds good" });
+
+    // A member finds the message, case-insensitively.
+    const hit = await request(app)
+      .get("/api/messages/search?q=PIZZA")
+      .set(bearer(b.token));
+    expect(hit.status).toBe(200);
+    expect(hit.body.data).toHaveLength(1);
+    expect(hit.body.data[0].content).toContain("pizza");
+    expect(hit.body.data[0].chatId).toBe(chatId);
+
+    // A non-member sees nothing from that chat.
+    const miss = await request(app)
+      .get("/api/messages/search?q=pizza")
+      .set(bearer(c.token));
+    expect(miss.status).toBe(200);
+    expect(miss.body.data).toHaveLength(0);
+
+    // A blank query is rejected by validation.
+    const bad = await request(app)
+      .get("/api/messages/search?q=")
+      .set(bearer(a.token));
+    expect(bad.status).toBe(400);
+  });
 });
