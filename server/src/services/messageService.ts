@@ -12,7 +12,7 @@ import {
   type MessageReaction,
 } from "../db/schema";
 import { AppError } from "../shared/errors";
-import { toPublicMessage } from "../shared/serialize";
+import { toPublicAttachment, toPublicMessage } from "../shared/serialize";
 import type { PublicMessage } from "../shared/types";
 import { hub } from "../realtime/hub";
 import { chatService } from "./chatService";
@@ -113,6 +113,64 @@ export const messageService = {
       .limit(opts.limit);
 
     return this.hydrate(rows);
+  },
+
+  /**
+   * Shared media/files/links/voice in a chat — powers the per-chat "Shared"
+   * tabs. Returns newest first, capped at 100.
+   */
+  async listShared(
+    chatId: string,
+    userId: string,
+    type: "media" | "files" | "links" | "voice"
+  ): Promise<Array<Record<string, unknown>>> {
+    await chatService.assertMember(chatId, userId);
+    const db = getDb();
+
+    if (type === "links") {
+      const rows = await db
+        .select()
+        .from(messages)
+        .where(
+          and(
+            eq(messages.chatId, chatId),
+            isNull(messages.deletedAt),
+            ilike(messages.content, "%http%")
+          )
+        )
+        .orderBy(desc(messages.createdAt))
+        .limit(100);
+      const items: Array<Record<string, unknown>> = [];
+      for (const m of rows) {
+        for (const url of extractUrls(m.content ?? "")) {
+          items.push({ url, messageId: m.id, createdAt: m.createdAt.toISOString() });
+          if (items.length >= 100) break;
+        }
+        if (items.length >= 100) break;
+      }
+      return items;
+    }
+
+    const kinds =
+      type === "media" ? ["image", "video"] : type === "voice" ? ["voice"] : ["document"];
+    const rows = await db
+      .select({ a: attachments, ts: messages.createdAt })
+      .from(attachments)
+      .innerJoin(messages, eq(attachments.messageId, messages.id))
+      .where(
+        and(
+          eq(messages.chatId, chatId),
+          isNull(messages.deletedAt),
+          inArray(attachments.kind, kinds as Array<"image" | "video" | "document" | "voice">)
+        )
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(100);
+    return rows.map((r) => ({
+      ...toPublicAttachment(r.a),
+      messageId: r.a.messageId,
+      createdAt: r.ts.toISOString(),
+    }));
   },
 
   async getForUser(messageId: string, userId: string): Promise<Message> {
@@ -360,6 +418,11 @@ export const messageService = {
     });
   },
 };
+
+/** Extract http(s) URLs from message text (for the Shared → Links tab). */
+function extractUrls(text: string): string[] {
+  return text.match(/https?:\/\/[^\s<>"')]+/gi) ?? [];
+}
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   const map = new Map<string, T[]>();

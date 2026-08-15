@@ -26,6 +26,21 @@ chatsRouter.get(
   })
 );
 
+const sharedQuery = z.object({
+  type: z.enum(["media", "files", "links", "voice"]).default("media"),
+});
+
+/** Shared media/files/links/voice in a chat (per-chat "Shared" tabs). */
+chatsRouter.get(
+  "/:id/shared",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const { type } = parse(sharedQuery, req.query);
+    sendData(res, await messageService.listShared(id, user.id, type));
+  })
+);
+
 /** Create a direct or group chat (dedupes existing direct chats). */
 chatsRouter.post(
   "/",

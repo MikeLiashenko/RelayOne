@@ -156,6 +156,14 @@
           </button>
 
           <div class="chat-header__actions">
+            <button class="icon-btn" type="button" data-action="shared-media" title="Shared media" aria-label="Shared media">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.8"/>
+                <rect x="14" y="3" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.8"/>
+                <rect x="3" y="14" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.8"/>
+                <rect x="14" y="14" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.8"/>
+              </svg>
+            </button>
             <button class="icon-btn" type="button" data-action="call-audio" data-call-kind="direct"
                     title="Audio call" aria-label="Start audio call">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -391,6 +399,27 @@
     </div>
 
     <!-- ================= SETTINGS MODAL ================= -->
+    <!-- ================= SHARED MEDIA MODAL ================= -->
+    <div class="modal" data-role="shared-modal" hidden>
+      <div class="modal__card modal__card--tall">
+        <header class="modal__head">
+          <h2>Shared</h2>
+          <button class="icon-btn" type="button" data-action="close-shared" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <div class="segmented segmented--wrap" data-role="shared-tabs">
+          <button type="button" class="segmented__btn is-active" data-shared-tab="media">Media</button>
+          <button type="button" class="segmented__btn" data-shared-tab="files">Files</button>
+          <button type="button" class="segmented__btn" data-shared-tab="links">Links</button>
+          <button type="button" class="segmented__btn" data-shared-tab="voice">Voice</button>
+        </div>
+        <div class="shared-body" data-role="shared-body"></div>
+      </div>
+    </div>
+
     <div class="modal" data-role="settings-modal" hidden>
       <div class="modal__card">
         <header class="modal__head">

@@ -10,6 +10,7 @@ import { createRealtime } from "./app/realtime.js";
 import { createCalls } from "./app/calls/index.js";
 import { createViewer } from "./app/viewer.js";
 import { push } from "./app/push.js";
+import { playEffect, effectForEmoji } from "./app/effects.js";
 import { ACCENTS, getAccent, getThemePref, initTheme, setAccent, setTheme } from "./app/features/theme.js";
 import { createFolders } from "./app/features/folders.js";
 import { ROADMAP } from "./app/features/roadmap.js";
@@ -102,19 +103,21 @@ const DRAFTS_KEY = "relayone.drafts";
   }
 })();
 
-/** Open a chat by id if it's in the user's list (used by push deep-links). */
-async function openChatSafely(chatId) {
+/** Open a chat by id (optionally scrolling to a message) — used by deep links. */
+async function openChatSafely(chatId, msgId) {
   if (!state.chats.some((c) => c.id === chatId)) await loadChats();
-  if (state.chats.some((c) => c.id === chatId)) openChat(chatId);
+  if (state.chats.some((c) => c.id === chatId)) openChat(chatId, msgId || null);
 }
 
 function openChatFromQuery() {
   try {
-    const id = new URLSearchParams(location.search).get("chat");
+    const params = new URLSearchParams(location.search);
+    const id = params.get("chat");
+    const msg = params.get("msg");
     if (!id) return;
     // Clean the URL so a refresh doesn't keep reopening it.
     history.replaceState(null, "", location.pathname);
-    openChatSafely(id);
+    openChatSafely(id, msg);
   } catch {
     /* ignore */
   }
@@ -184,6 +187,18 @@ function wireStaticUI() {
   $('[data-action="call-video"]').addEventListener("click", () => startCall("video"));
   $('[data-action="call-group-audio"]').addEventListener("click", () => startGroupCall("audio"));
   $('[data-action="call-group-video"]').addEventListener("click", () => startGroupCall("video"));
+  $('[data-action="shared-media"]').addEventListener("click", openSharedMedia);
+  $('[data-action="close-shared"]').addEventListener("click", closeSharedMedia);
+  $$('[data-shared-tab]').forEach((b) =>
+    b.addEventListener("click", () => {
+      sharedTab = b.dataset.sharedTab;
+      setActiveSharedTab();
+      loadSharedTab();
+    })
+  );
+  $('[data-role="shared-modal"]').addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeSharedMedia();
+  });
 
   $('[data-action="open-saved"]').addEventListener("click", openSaved);
   $('[data-action="jump-pin"]').addEventListener("click", jumpNextPin);
@@ -617,7 +632,8 @@ function renderHeader() {
   if (actions) {
     const isDirect = chat.type === "direct";
     const isGroupy = chat.type === "group" || chat.type === "channel";
-    actions.hidden = !(isDirect || isGroupy);
+    // The Shared-media button is always available; call buttons depend on type.
+    actions.hidden = false;
     $$('[data-call-kind="direct"]', actions).forEach((b) => (b.hidden = !isDirect));
     $$('[data-call-kind="group"]', actions).forEach((b) => (b.hidden = !isGroupy));
   }
@@ -787,6 +803,8 @@ function messageActions(m, mine) {
       onClick: (e) => openReactionPicker(e, m) }, "🙂"),
     el("button", { class: "msg__action", type: "button", title: "Reply",
       onClick: () => startReply(m) }, "↩"),
+    el("button", { class: "msg__action", type: "button", title: "Copy link",
+      onClick: () => copyMessageLink(m) }, "🔗"),
     el("button", { class: "msg__action" + (m.pinnedAt ? " is-active" : ""), type: "button",
       title: m.pinnedAt ? "Unpin" : "Pin", onClick: () => togglePin(m) }, "📌")
   );
@@ -799,6 +817,31 @@ function messageActions(m, mine) {
     );
   }
   return wrap;
+}
+
+/** Copy a deep link to a specific message (opens + scrolls to it). */
+function copyMessageLink(m) {
+  const base = location.origin + location.pathname; // …/app.html
+  const url = `${base}?chat=${encodeURIComponent(m.chatId)}&msg=${encodeURIComponent(m.id)}`;
+  const done = () => toast("Message link copied");
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url).then(done, () => toast("Couldn’t copy the link"));
+  } else {
+    toast("Couldn’t copy the link");
+  }
+}
+
+let toastTimer = null;
+function toast(text) {
+  let t = $('[data-role="toast"]');
+  if (!t) {
+    t = el("div", { class: "toast", dataset: { role: "toast" } });
+    document.body.appendChild(t);
+  }
+  t.textContent = text;
+  t.classList.add("is-visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("is-visible"), 2200);
 }
 
 function groupReactions(reactions = []) {
@@ -1275,6 +1318,7 @@ function wireProfileForms() {
     if (!$('[data-role="edit-profile-modal"]').hidden) closeEditProfile();
     else if (!$('[data-role="profile-modal"]').hidden) closeViewProfile();
     else if (!$('[data-role="new-chat-modal"]').hidden) closeNewChat();
+    else if (!$('[data-role="shared-modal"]').hidden) closeSharedMedia();
   });
 }
 
@@ -2395,6 +2439,115 @@ function openImageViewer(a) {
   viewer.openImages(gallery.length ? gallery : [a], idx >= 0 ? idx : 0);
 }
 
+/* -- Shared media (per-chat Media / Files / Links / Voice) ----------------- */
+
+let sharedTab = "media";
+
+function openSharedMedia() {
+  if (!state.activeId) return;
+  sharedTab = "media";
+  setActiveSharedTab();
+  $('[data-role="shared-modal"]').hidden = false;
+  loadSharedTab();
+}
+function closeSharedMedia() {
+  $('[data-role="shared-modal"]').hidden = true;
+}
+function setActiveSharedTab() {
+  $$('[data-shared-tab]').forEach((b) =>
+    b.classList.toggle("is-active", b.dataset.sharedTab === sharedTab)
+  );
+}
+
+async function loadSharedTab() {
+  const body = $('[data-role="shared-body"]');
+  clear(body);
+  body.append(el("div", { class: "shared-empty" }, "Loading…"));
+  const chatId = state.activeId;
+  const r = await api.listShared(chatId, sharedTab);
+  if (chatId !== state.activeId || $('[data-role="shared-modal"]').hidden) return;
+  clear(body);
+  const items = r.ok ? r.data : [];
+  if (!items.length) {
+    body.append(el("div", { class: "shared-empty" }, `Nothing in ${sharedTab} yet.`));
+    return;
+  }
+  if (sharedTab === "media") renderSharedMedia(body, items);
+  else if (sharedTab === "links") renderSharedLinks(body, items);
+  else if (sharedTab === "voice") renderSharedVoice(body, items);
+  else renderSharedFiles(body, items);
+}
+
+function renderSharedMedia(body, items) {
+  const grid = el("div", { class: "shared-grid" });
+  const images = items.filter((i) => i.kind === "image");
+  for (const it of items) {
+    const cell = el("div", {
+      class: "shared-cell" + (it.kind === "image" ? "" : " shared-cell--video"),
+      onClick: () => {
+        if (it.kind === "image") {
+          const idx = images.findIndex((x) => x.url === it.url);
+          viewer.openImages(images, idx < 0 ? 0 : idx);
+        } else {
+          viewer.openFile(it);
+        }
+      },
+    });
+    if (it.kind === "image") {
+      cell.style.backgroundImage = `url("${cssUrlEscape(it.url)}")`;
+    } else {
+      cell.append(el("span", { class: "shared-cell__play" }, "▶"));
+    }
+    grid.append(cell);
+  }
+  body.append(grid);
+}
+
+function renderSharedFiles(body, items) {
+  const list = el("div", { class: "shared-list" });
+  for (const it of items) {
+    list.append(
+      el("div", { class: "shared-row", onClick: () => viewer.openFile(it) },
+        el("span", { class: "shared-row__icon" }, fileGlyph(it)),
+        el("div", { class: "shared-row__meta" },
+          el("span", { class: "shared-row__name" }, it.fileName || "File"),
+          el("span", { class: "shared-row__sub" }, humanSize(it.sizeBytes))))
+    );
+  }
+  body.append(list);
+}
+
+function renderSharedVoice(body, items) {
+  const list = el("div", { class: "shared-list" });
+  for (const it of items) {
+    list.append(
+      el("div", { class: "shared-row" },
+        el("span", { class: "shared-row__icon" }, "🎵"),
+        el("audio", { class: "shared-row__audio", src: it.url, controls: true, preload: "none" }))
+    );
+  }
+  body.append(list);
+}
+
+function renderSharedLinks(body, items) {
+  const list = el("div", { class: "shared-list" });
+  for (const it of items) {
+    list.append(
+      el("a", {
+        class: "shared-row shared-row--link",
+        href: it.url,
+        target: "_blank",
+        rel: "noopener noreferrer",
+      },
+        el("span", { class: "shared-row__icon" }, "🔗"),
+        el("div", { class: "shared-row__meta" },
+          el("span", { class: "shared-row__name" }, it.url),
+          el("span", { class: "shared-row__sub" }, timeRelative(it.createdAt))))
+    );
+  }
+  body.append(list);
+}
+
 function attachmentNode(a) {
   if (a.kind === "image") {
     return el(
@@ -2513,6 +2666,10 @@ function onReaction(ev) {
     if (!msg.reactions.some((r) => r.emoji === ev.emoji && r.userId === ev.userId)) {
       msg.reactions.push({ emoji: ev.emoji, userId: ev.userId });
     }
+    // ✨ Message effects: certain reactions trigger a little burst for everyone
+    // currently viewing the chat.
+    const fx = effectForEmoji(ev.emoji);
+    if (fx) playEffect(fx);
   } else {
     msg.reactions = msg.reactions.filter((r) => !(r.emoji === ev.emoji && r.userId === ev.userId));
   }

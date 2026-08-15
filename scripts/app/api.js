@@ -34,6 +34,7 @@ export const api = {
 
   searchUsers: (q) => apiFetch(`/users/search?q=${encodeURIComponent(q)}`),
   searchMessages: (q) => apiFetch(`/messages/search?q=${encodeURIComponent(q)}`),
+  listShared: (chatId, type) => apiFetch(`/chats/${chatId}/shared?type=${type}`),
   createChat: (body) => apiFetch("/chats", { method: "POST", body }),
   createDirect: (otherUserId) =>
     apiFetch("/chats", { method: "POST", body: { type: "direct", memberIds: [otherUserId] } }),

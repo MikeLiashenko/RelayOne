@@ -787,3 +787,68 @@
 .sessions__revoke:hover { border-color: var(--color-danger); }
 
 .settings__hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* ==========================================================================
+   📌 Shared media (per-chat Media / Files / Links / Voice)
+   ========================================================================== */
+.shared-body { overflow-y: auto; max-height: 60vh; margin-top: var(--space-3); }
+.shared-empty { color: var(--text-muted); font-size: 0.9375rem; padding: var(--space-5); text-align: center; }
+
+.shared-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.shared-cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--surface-field) center / cover no-repeat;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.shared-cell:hover { transform: scale(0.97); }
+.shared-cell--video { display: grid; place-items: center; }
+.shared-cell__play { font-size: 1.5rem; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+
+.shared-list { display: flex; flex-direction: column; gap: 4px; }
+.shared-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.shared-row:hover { background: var(--surface-raised-hover); }
+.shared-row__icon { font-size: 1.25rem; flex: 0 0 auto; }
+.shared-row__meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.shared-row__name { font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shared-row--link .shared-row__name { color: var(--color-blue); }
+.shared-row__sub { font-size: 0.75rem; color: var(--text-muted); }
+.shared-row__audio { flex: 1; height: 34px; }
+
+/* 🔗 Toast (copied link, etc.) */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 20px);
+  z-index: 420;
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 20px 50px -20px rgba(0,0,0,0.7);
+  font-size: 0.875rem;
+  font-weight: var(--fw-medium);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out);
+}
+.toast.is-visible { opacity: 1; transform: translate(-50%, 0); }

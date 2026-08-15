@@ -170,4 +170,37 @@ describe("chats, messages & authorization", () => {
       .set(bearer(a.token));
     expect(bad.status).toBe(400);
   });
+
+  it("collects shared links in a chat", async () => {
+    const a = await registerUser(app, { email: "sh_a@relayone.test", username: "shared_a" });
+    const b = await registerUser(app, { email: "sh_b@relayone.test", username: "shared_b" });
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(a.token))
+      .send({ content: "check this https://example.com/page and text" });
+    await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(b.token))
+      .send({ content: "no link here" });
+
+    const links = await request(app)
+      .get(`/api/chats/${chatId}/shared?type=links`)
+      .set(bearer(b.token));
+    expect(links.status).toBe(200);
+    expect(links.body.data).toHaveLength(1);
+    expect(links.body.data[0].url).toBe("https://example.com/page");
+
+    // A non-member can't read a chat's shared media.
+    const c = await registerUser(app, { email: "sh_c@relayone.test", username: "shared_c" });
+    const denied = await request(app)
+      .get(`/api/chats/${chatId}/shared?type=media`)
+      .set(bearer(c.token));
+    expect(denied.status).toBe(403);
+  });
 });
