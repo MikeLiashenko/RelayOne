@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#080B1A" />
+  <meta name="description" content="RelayOne — one place for everyone. A serious, global messaging platform." />
+  <title>RelayOne — One place for everyone</title>
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+
+  <!-- Inter, with a robust system fallback stack in tokens.css -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+  />
+
+  <style>
+/* ==========================================================================
+   RelayOne — Design Tokens
+   Single source of truth for brand colors, typography, spacing and motion.
+   ========================================================================== */
+
+:root {
+  /* --- Brand palette --------------------------------------------------- */
+  --color-navy:            #080B1A;   /* deep navy background */
+  --color-blue:            #168BFF;   /* primary blue        */
+  --color-violet:          #713BFF;   /* accent purple       */
+
+  /* Signature accent gradient — reserved for important accents only. */
+  --gradient-accent:       linear-gradient(135deg, var(--color-blue) 0%, var(--color-violet) 100%);
+  --gradient-accent-hover: linear-gradient(135deg, #2E9AFF 0%, #834FFF 100%);
+
+  /* --- Surfaces & text ------------------------------------------------- */
+  --surface-base:          var(--color-navy);
+  --surface-raised:        #0E1224;   /* subtle raised panels / secondary btn */
+  --surface-raised-hover:  #141935;
+
+  --border-subtle:         rgba(255, 255, 255, 0.10);
+  --border-strong:         rgba(255, 255, 255, 0.18);
+
+  --text-primary:          #F5F7FF;
+  --text-secondary:        rgba(245, 247, 255, 0.66);
+  --text-muted:            rgba(245, 247, 255, 0.40);
+
+  /* --- Typography ------------------------------------------------------ */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Roboto, Helvetica, Arial, sans-serif;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Fluid type — comfortable on small desktop windows, capped for large. */
+  --fs-wordmark: clamp(2.25rem, 1.4rem + 2.6vw, 3.25rem);   /* 36 → 52px */
+  --fs-tagline:  clamp(1.0625rem, 0.9rem + 0.5vw, 1.375rem);/* 17 → 22px */
+  --fs-button:   1rem;
+  --fs-legal:    0.8125rem;
+
+  --tracking-tight:  -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.01em;
+
+  /* --- Spacing scale --------------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* --- Radius & elevation ---------------------------------------------- */
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-pill: 999px;
+
+  --shadow-primary:       0 12px 32px -12px rgba(60, 90, 255, 0.55);
+  --shadow-primary-hover: 0 16px 40px -12px rgba(80, 110, 255, 0.70);
+
+  /* --- Motion ---------------------------------------------------------- */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft:  cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast:   160ms;
+  --dur-med:    240ms;
+  --dur-slow:   320ms;
+
+  /* --- Auth-flow surfaces & form state --------------------------------- */
+  --surface-card:        #11162A;   /* auth card + inputs (brand spec)     */
+  --surface-field:       #0C1122;   /* input well, slightly deeper         */
+  --surface-field-focus: #10162C;
+
+  --color-muted:         #8B93A8;   /* muted text (brand spec)             */
+
+  /* Semantic state colors + soft tints for validation feedback. */
+  --color-success:       #35D6A4;
+  --color-danger:        #FF5D6A;
+  --color-warning:       #FFB454;
+  --success-soft:        rgba(53, 214, 164, 0.12);
+  --danger-soft:         rgba(255, 93, 106, 0.12);
+
+  --focus-ring:          0 0 0 4px rgba(22, 139, 255, 0.22);
+  --focus-ring-danger:   0 0 0 4px rgba(255, 93, 106, 0.20);
+  --focus-ring-success:  0 0 0 4px rgba(53, 214, 164, 0.18);
+
+  --control-height:      56px;
+}
+
+/* ==========================================================================
+   Light theme — surface/text overrides. Accent colors (blue/violet) are kept
+   and can be re-tinted at runtime by the accent picker. The dark values above
+   remain the default (no attribute, or data-theme="dark").
+   ========================================================================== */
+:root[data-theme="light"] {
+  --color-navy:           #EEF1FA;
+  --surface-base:         #EEF1FA;
+  --surface-raised:       #FFFFFF;
+  --surface-raised-hover: #E7ECF7;
+
+  --border-subtle:        rgba(12, 22, 44, 0.10);
+  --border-strong:        rgba(12, 22, 44, 0.18);
+
+  --text-primary:         #0E1424;
+  --text-secondary:       rgba(14, 20, 36, 0.66);
+  --text-muted:           rgba(14, 20, 36, 0.42);
+
+  --surface-card:         #FFFFFF;
+  --surface-field:        #F1F4FB;
+  --surface-field-focus:  #FFFFFF;
+
+  --color-muted:          #5B6478;
+
+  --success-soft:         rgba(53, 214, 164, 0.16);
+  --danger-soft:          rgba(255, 93, 106, 0.12);
+}
+
+</style>
+  <style>
+/* ==========================================================================
+   RelayOne — Base / reset
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  color: var(--text-primary);
+  background-color: var(--surface-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* Consistent, on-brand keyboard focus. */
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 3px;
+  border-radius: var(--radius-md);
+}
+
+/* Accessible visually-hidden utility. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+</style>
+  <style>
+/* ==========================================================================
+   RelayOne — Button component
+   Reusable across the auth flow. Variants: primary (gradient), secondary
+   (dark / outlined). Works as <a> or <button>.
+   ========================================================================== */
+
+.btn {
+  --btn-height: 54px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--btn-height);
+  padding: 0 var(--space-6);
+  width: 100%;
+
+  font-size: 0.9375rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.005em;
+  line-height: 1;
+
+  border: 1px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  transition:
+    transform    var(--dur-fast) var(--ease-out),
+    box-shadow   var(--dur-med)  var(--ease-soft),
+    background   var(--dur-med)  var(--ease-soft),
+    border-color var(--dur-med)  var(--ease-soft);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+/* --- Primary: filled gradient ----------------------------------------- */
+.btn--primary {
+  color: #ffffff;
+  background-image: var(--gradient-accent);
+  box-shadow: var(--shadow-primary);
+}
+
+.btn--primary:hover {
+  background-image: var(--gradient-accent-hover);
+  box-shadow: var(--shadow-primary-hover);
+}
+
+/* --- Secondary: subtle translucent / outlined ------------------------- */
+.btn--secondary {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.btn--secondary:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .btn:active {
+    transition: none;
+    transform: none;
+  }
+}
+
+</style>
+  <style>
+/* ==========================================================================
+   RelayOne — Welcome screen
+   ========================================================================== */
+
+.welcome {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* A single, tight, restrained wash sitting just behind the symbol — enough to
+   give depth, not a diffuse cloud. */
+.welcome::before {
+  content: "";
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  width: min(440px, 62vw);
+  height: min(440px, 62vw);
+  transform: translate(-50%, -50%);
+  background:
+    radial-gradient(circle at center,
+      rgba(22, 139, 255, 0.10) 0%,
+      rgba(113, 59, 255, 0.06) 40%,
+      transparent 62%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.welcome__main {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-5) var(--space-6);
+  text-align: center;
+}
+
+/* --- Brand block: symbol + wordmark + tagline ------------------------- */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.brand__symbol {
+  position: relative;
+  width: clamp(96px, 9vw, 116px);
+  height: clamp(96px, 9vw, 116px);
+}
+
+.brand__symbol img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* A tight, contained halo — hugs the mark for depth without the diffuse
+   cloud that washed it out. */
+.brand__symbol::before {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 46%,
+      rgba(34, 120, 255, 0.42) 0%,
+      rgba(113, 59, 255, 0.22) 45%,
+      transparent 70%);
+  filter: blur(16px);
+  z-index: 0;
+}
+
+.brand__text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brand__wordmark {
+  margin: 0;
+  font-size: clamp(2rem, 1.55rem + 1.7vw, 2.6rem);   /* 32 → ~42px */
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.brand__tagline {
+  margin: 0;
+  font-size: clamp(1rem, 0.94rem + 0.3vw, 1.125rem); /* 16 → 18px */
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  color: var(--color-muted);
+}
+
+/* --- Actions ---------------------------------------------------------- */
+.welcome__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+/* --- Footer legal ----------------------------------------------------- */
+.welcome__legal {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  text-align: center;
+  font-size: var(--fs-legal);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.welcome__legal a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.welcome__legal a:hover {
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Entrance choreography: logo → wordmark/tagline → buttons → legal
+   ========================================================================== */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes rise-symbol {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Default state before JS marks the page ready: hidden, ready to animate. */
+.is-animated .brand__symbol,
+.is-animated .brand__wordmark,
+.is-animated .brand__tagline,
+.is-animated .welcome__actions,
+.is-animated .welcome__legal {
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+/* Resting state is explicitly visible (opacity: 1) so the content can never
+   get stuck hidden if animations are paused/unsupported; `backwards` fill
+   still holds each element hidden through its stagger delay, then plays it in
+   and settles back on the visible resting state. */
+.is-animated.is-ready .brand__symbol {
+  opacity: 1;
+  animation: rise-symbol 720ms var(--ease-out) backwards;
+}
+.is-animated.is-ready .brand__wordmark {
+  opacity: 1;
+  animation: rise 620ms var(--ease-out) 220ms backwards;
+}
+.is-animated.is-ready .brand__tagline {
+  opacity: 1;
+  animation: rise 620ms var(--ease-out) 340ms backwards;
+}
+.is-animated.is-ready .welcome__actions {
+  opacity: 1;
+  animation: rise 640ms var(--ease-out) 520ms backwards;
+}
+.is-animated.is-ready .welcome__legal {
+  opacity: 1;
+  animation: rise 640ms var(--ease-out) 680ms backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-animated .brand__symbol,
+  .is-animated .brand__wordmark,
+  .is-animated .brand__tagline,
+  .is-animated .welcome__actions,
+  .is-animated .welcome__legal {
+    opacity: 1;
+    animation: none !important;
+    will-change: auto;
+  }
+}
+
+</style>
+</head>
+<body>
+  <main class="welcome">
+    <div class="welcome__main">
+      <div class="brand">
+        <div class="brand__symbol">
+          <img src="assets/logo-symbol.svg" alt="" width="116" height="116" />
+        </div>
+
+        <div class="brand__text">
+          <h1 class="brand__wordmark">RelayOne</h1>
+          <p class="brand__tagline">One place for everyone.</p>
+        </div>
+      </div>
+
+      <div class="welcome__actions">
+        <a class="btn btn--primary" href="register.html" data-route="create-account">
+          Create account
+        </a>
+        <a class="btn btn--secondary" href="login.html" data-route="login">
+          Log in
+        </a>
+      </div>
+    </div>
+
+    <footer class="welcome__legal">
+      By continuing, you agree to the
+      <a href="#/terms">Terms of Service</a> and
+      <a href="#/privacy">Privacy Policy</a>.
+    </footer>
+  </main>
+
+  <script type="module">
+/**
+ * Guest guard for the Welcome / register / login pages: if a valid session
+ * already exists, send the user straight to the main interface.
+ */
+import { requireGuest } from "./auth/session.js";
+
+requireGuest("app.html");
+
+</script>
+  <script type="module">
+/**
+ * RelayOne — Welcome screen behavior
+ *
+ * Responsibilities:
+ *   1. Trigger the entrance choreography once the page is painted.
+ *   2. Provide lightweight navigation hooks toward the (upcoming) auth screens.
+ *
+ * The markup already ships the buttons as accessible anchors, so the screen
+ * works with JavaScript disabled. This script only enhances it.
+ */
+
+/* -- 1. Entrance animation ------------------------------------------------- */
+
+function playIntro() {
+  const root = document.querySelector(".welcome");
+  if (!root) return;
+
+  const prefersReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
+
+  // Opt the tree into the animated (initially-hidden) state.
+  root.classList.add("is-animated");
+
+  if (prefersReducedMotion) {
+    root.classList.add("is-ready");
+    return;
+  }
+
+  const reveal = () => root.classList.add("is-ready");
+
+  // Next frame → let the browser register the hidden state, then reveal.
+  requestAnimationFrame(() => requestAnimationFrame(reveal));
+
+  // Safety net: rAF is paused while a tab is backgrounded / not compositing,
+  // which would otherwise leave the content stuck at opacity 0. A short timer
+  // guarantees the reveal regardless. `is-ready` is idempotent.
+  setTimeout(reveal, 400);
+}
+
+/* -- 2. Navigation hooks --------------------------------------------------- */
+
+import { resolveRoute } from "./routes.js";
+
+/**
+ * Navigate to a named route. The Welcome buttons already carry the resolved
+ * href, so this is primarily for programmatic navigation; it stays in sync
+ * with the anchors via the shared route map.
+ *
+ * @param {string} route  e.g. "create-account" | "login"
+ */
+function navigateTo(route) {
+  window.location.assign(resolveRoute(route));
+}
+
+function wireActions() {
+  const buttons = document.querySelectorAll("[data-route]");
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      // Surface intent for observers, then let the anchor's href navigate
+      // (works without JS and keeps a single source of truth in routes.js).
+      document.dispatchEvent(
+        new CustomEvent("relayone:navigate", {
+          detail: { route: button.dataset.route },
+        })
+      );
+    });
+  });
+}
+
+/* -- Boot ------------------------------------------------------------------ */
+
+function init() {
+  playIntro();
+  wireActions();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init, { once: true });
+} else {
+  init();
+}
+
+export { navigateTo };
+
+</script>
+</body>
+</html>
