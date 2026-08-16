@@ -1963,12 +1963,20 @@ function startGroupCall(media) {
 
 /* -- Features: banner, settings, what's new, presence ---------------------- */
 
-const BANNER_KEY = "relayone.banner.v1.dismissed";
+const BANNER_KEY = "relayone.banner.v2.dismissed";
 const PRESENCE_KEY = "relayone.presence";
 
 function wireFeatures() {
-  // What's-new banner.
+  // What's-new banner — subtitle reflects the latest shipped features.
   const banner = $('[data-role="feature-banner"]');
+  const sub = $('[data-role="banner-sub"]');
+  if (sub) {
+    const live = new Set(ROADMAP.filter((f) => f.status === "live").map((f) => f.title));
+    const highlights = ["Calls", "Polls", "Threads", "Quiz polls", "Shared media"].filter((t) =>
+      live.has(t)
+    );
+    if (highlights.length) sub.textContent = highlights.slice(0, 3).join(", ") + " & more";
+  }
   banner.hidden = localStorage.getItem(BANNER_KEY) === "1";
   $('[data-action="dismiss-banner"]').addEventListener("click", () => {
     banner.hidden = true;

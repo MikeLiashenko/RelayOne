@@ -62,17 +62,19 @@
 
       <!-- 🚀 What's-new banner -->
       <div class="feature-banner" data-role="feature-banner" hidden>
-        <span class="feature-banner__emoji">🚀</span>
-        <div class="feature-banner__body">
-          <strong>New in RelayOne</strong>
-          <span>Folders, Themes, Drafts &amp; more</span>
+        <div class="feature-banner__top">
+          <span class="feature-banner__emoji">🚀</span>
+          <div class="feature-banner__body">
+            <strong>New in RelayOne</strong>
+            <span data-role="banner-sub">Calls, Threads, Polls &amp; more</span>
+          </div>
+          <button class="feature-banner__x icon-btn" type="button" data-action="dismiss-banner" aria-label="Dismiss">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
         <button class="feature-banner__cta" type="button" data-action="open-whatsnew">See what's new</button>
-        <button class="feature-banner__x icon-btn" type="button" data-action="dismiss-banner" aria-label="Dismiss">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
       </div>
 
       <!-- 🗂️ Folders -->
