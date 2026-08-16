@@ -1,6 +1,10 @@
+import { eq } from "drizzle-orm";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/api";
+import { getDb } from "../src/db";
+import { messages, scheduledMessages } from "../src/db/schema";
+import { schedulerService } from "../src/services/schedulerService";
 import { bearer, registerUser } from "./helpers";
 
 const app = createApp();
@@ -334,6 +338,73 @@ describe("chats, messages & authorization", () => {
       .set(bearer(a.token))
       .send({ optionIds: [right] });
     expect(late.status).toBe(400);
+  });
+
+  it("sends a scheduled message when it becomes due", async () => {
+    const a = await registerUser(app, { email: "sc_a@relayone.test", username: "sched_a" });
+    const b = await registerUser(app, { email: "sc_b@relayone.test", username: "sched_b" });
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    // Scheduling in the past is rejected…
+    const past = await request(app)
+      .post(`/api/chats/${chatId}/schedule`)
+      .set(bearer(a.token))
+      .send({ content: "late", sendAt: new Date(Date.now() - 1000).toISOString() });
+    expect(past.status).toBe(400);
+
+    // …scheduling for the future works and shows up in the pending list.
+    const future = await request(app)
+      .post(`/api/chats/${chatId}/schedule`)
+      .set(bearer(a.token))
+      .send({ content: "hello later", sendAt: new Date(Date.now() + 60_000).toISOString() });
+    expect(future.status).toBe(201);
+    const pending = await request(app).get(`/api/chats/${chatId}/scheduled`).set(bearer(a.token));
+    expect(pending.body.data).toHaveLength(1);
+
+    // Make it due and run the scheduler → the message is delivered.
+    await getDb()
+      .update(scheduledMessages)
+      .set({ sendAt: new Date(Date.now() - 1000) })
+      .where(eq(scheduledMessages.id, future.body.data.id));
+    await schedulerService.tick();
+
+    const list = await request(app).get(`/api/chats/${chatId}/messages`).set(bearer(b.token));
+    expect(list.body.data.some((m: any) => m.content === "hello later")).toBe(true);
+    // And it's no longer pending.
+    const after = await request(app).get(`/api/chats/${chatId}/scheduled`).set(bearer(a.token));
+    expect(after.body.data).toHaveLength(0);
+  });
+
+  it("auto-deletes a self-destruct message once it expires", async () => {
+    const a = await registerUser(app, { email: "sd_a@relayone.test", username: "sd_a" });
+    const b = await registerUser(app, { email: "sd_b@relayone.test", username: "sd_b" });
+    const chat = await request(app)
+      .post("/api/chats")
+      .set(bearer(a.token))
+      .send({ type: "direct", memberIds: [b.user.id] });
+    const chatId = chat.body.data.id;
+
+    const sent = await request(app)
+      .post(`/api/chats/${chatId}/messages`)
+      .set(bearer(a.token))
+      .send({ content: "this will vanish", ttlSeconds: 3600 });
+    expect(sent.body.data.expiresAt).toBeTruthy();
+
+    // Force it past its expiry, then sweep.
+    await getDb()
+      .update(messages)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(messages.id, sent.body.data.id));
+    await schedulerService.tick();
+
+    const list = await request(app).get(`/api/chats/${chatId}/messages`).set(bearer(a.token));
+    const m = list.body.data.find((x: any) => x.id === sent.body.data.id);
+    expect(m.deletedAt).toBeTruthy();
+    expect(m.content).toBeNull();
   });
 
   it("keeps an edit history", async () => {

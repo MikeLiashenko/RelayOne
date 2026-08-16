@@ -6,6 +6,8 @@
  */
 export const ROADMAP = [
   // ── Latest batch (newest first) ──────────────────────────────────────────
+  { icon: "⏰", title: "Scheduled messages", status: "live", isNew: true, desc: "Write now, pick a date & time — RelayOne sends it automatically." },
+  { icon: "🕐", title: "Self-destruct", status: "live", isNew: true, desc: "Set a timer (10s–1 week); the message deletes itself." },
   { icon: "🗳️", title: "Quiz polls", status: "live", isNew: true, desc: "Mark a correct answer; voters see if they got it right." },
   { icon: "📊", title: "Polls", status: "live", isNew: true, desc: "Single or multiple choice, anonymous, closeable, live results." },
   { icon: "🧵", title: "Threads", status: "live", isNew: true, desc: "Open a discussion of replies under any message." },

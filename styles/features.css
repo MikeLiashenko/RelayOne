@@ -1079,3 +1079,60 @@
   text-align: center;
   border-top: 1px solid var(--border-subtle);
 }
+
+/* ==========================================================================
+   ⏱ Self-destruct + 🕒 Scheduled messages
+   ========================================================================== */
+.fmt-btn.is-active { color: var(--color-blue); background: color-mix(in srgb, var(--color-blue) 14%, transparent); }
+.msg__ttl { cursor: default; opacity: 0.8; }
+
+.ttl-picker {
+  position: fixed;
+  z-index: 320;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 6px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.8);
+}
+.ttl-picker__btn {
+  text-align: left;
+  padding: 8px 10px;
+  font: inherit; font-size: 0.875rem;
+  color: var(--text-primary);
+  background: transparent; border: 0; border-radius: 7px; cursor: pointer;
+}
+.ttl-picker__btn:hover { background: var(--surface-field); }
+.ttl-picker__btn.is-active { color: var(--color-blue); font-weight: var(--fw-semibold); }
+
+.schedule-when {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color-scheme: dark;
+}
+:root[data-theme="light"] .schedule-when { color-scheme: light; }
+.schedule-pending { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 6px; }
+.schedule-pending__title { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.schedule-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.schedule-row__meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.schedule-row__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schedule-row__when { font-size: 0.75rem; color: var(--text-muted); }
+.schedule-row__cancel {
+  flex: 0 0 auto;
+  font: inherit; font-size: 0.75rem; color: var(--color-danger);
+  background: transparent; border: 0; cursor: pointer;
+}
+.schedule-row__cancel:hover { text-decoration: underline; }

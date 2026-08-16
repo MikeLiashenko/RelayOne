@@ -29,6 +29,11 @@ async function main(): Promise<void> {
     console.log("✓ Database migrations applied.");
   }
 
+  // Background scheduler: sends due scheduled messages and deletes expired
+  // (self-destruct) ones. Safe to run on the single app instance.
+  const { schedulerService } = await import("./services/schedulerService");
+  schedulerService.start();
+
   const app = createApp();
   const server = http.createServer(app);
   attachRealtime(server);

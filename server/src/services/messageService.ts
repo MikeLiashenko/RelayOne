@@ -232,10 +232,19 @@ export const messageService = {
   async send(
     chatId: string,
     senderId: string,
-    input: { content?: string; attachmentIds?: string[]; replyToId?: string }
+    input: {
+      content?: string;
+      attachmentIds?: string[];
+      replyToId?: string;
+      ttlSeconds?: number;
+    }
   ): Promise<PublicMessage> {
     await chatService.assertMember(chatId, senderId);
     const db = getDb();
+    const expiresAt =
+      input.ttlSeconds && input.ttlSeconds > 0
+        ? new Date(Date.now() + input.ttlSeconds * 1000)
+        : null;
 
     // A reply must target a message in THIS chat (don't trust the client).
     if (input.replyToId) {
@@ -256,6 +265,7 @@ export const messageService = {
         senderId,
         content: input.content ?? null,
         replyToId: input.replyToId ?? null,
+        expiresAt,
       })
       .returning();
 

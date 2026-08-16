@@ -257,6 +257,8 @@
           <button class="fmt-btn" type="button" data-fmt="link" title="Link">🔗</button>
           <button class="fmt-btn" type="button" data-action="emoji" title="Emoji">😊</button>
           <button class="fmt-btn" type="button" data-action="poll" title="Create poll">📊</button>
+          <button class="fmt-btn" type="button" data-action="self-destruct" title="Self-destruct timer">⏱</button>
+          <button class="fmt-btn" type="button" data-action="schedule" title="Send later">🕒</button>
         </div>
 
         <form class="composer" data-role="composer">
@@ -411,6 +413,26 @@
     </div>
 
     <!-- ================= SETTINGS MODAL ================= -->
+    <!-- ================= SCHEDULE MODAL ================= -->
+    <div class="modal" data-role="schedule-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2>🕒 Send later</h2>
+          <button class="icon-btn" type="button" data-action="close-schedule" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <textarea class="poll-form__q" data-role="schedule-text" rows="2" placeholder="Message to send later…" maxlength="8000"></textarea>
+        <label class="field__label">When</label>
+        <input class="schedule-when" type="datetime-local" data-role="schedule-when" />
+        <div class="composer-error" data-role="schedule-error" hidden></div>
+        <button class="btn btn--primary" type="button" data-action="schedule-create">Schedule</button>
+        <div class="schedule-pending" data-role="scheduled-list"></div>
+      </div>
+    </div>
+
     <!-- ================= POLL MODAL ================= -->
     <div class="modal" data-role="poll-modal" hidden>
       <div class="modal__card">

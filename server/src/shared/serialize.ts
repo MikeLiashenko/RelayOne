@@ -162,6 +162,7 @@ export function toPublicMessage(
     deletedAt: iso(m.deletedAt),
     pinnedAt: iso(m.pinnedAt),
     pinnedBy: m.pinnedBy ?? null,
+    expiresAt: iso(m.expiresAt),
     replyTo: replyTo
       ? {
           id: replyTo.id,

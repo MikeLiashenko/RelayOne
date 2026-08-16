@@ -107,6 +107,7 @@ export interface PublicMessage {
   deletedAt: string | null;
   pinnedAt: string | null;
   pinnedBy: string | null;
+  expiresAt: string | null;
   replyTo: ReplyPreview | null;
   replyCount: number;
   poll: PublicPoll | null;

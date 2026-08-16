@@ -237,6 +237,8 @@ export const messages = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     pinnedBy: uuid("pinned_by").references(() => users.id, { onDelete: "set null" }),
+    // Self-destruct: the message is swept (soft-deleted) once this passes.
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
   (t) => ({
     byChatTime: index("messages_chat_id_created_at_idx").on(
@@ -244,6 +246,7 @@ export const messages = pgTable(
       t.createdAt
     ),
     bySender: index("messages_sender_id_idx").on(t.senderId),
+    byExpiry: index("messages_expires_at_idx").on(t.expiresAt),
   })
 );
 
@@ -344,6 +347,35 @@ export const pushSubscriptions = pgTable(
   },
   (t) => ({
     byUser: index("push_subscriptions_user_id_idx").on(t.userId),
+  })
+);
+
+/* ==========================================================================
+   scheduled_messages — messages queued to send at a future time
+   ========================================================================== */
+
+export const scheduledMessages = pgTable(
+  "scheduled_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chatId: uuid("chat_id")
+      .notNull()
+      .references(() => chats.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content"),
+    replyToId: uuid("reply_to_id"),
+    // Optional self-destruct applied once the scheduled message is sent.
+    ttlSeconds: integer("ttl_seconds"),
+    sendAt: timestamp("send_at", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => ({
+    byDue: index("scheduled_messages_send_at_idx").on(t.sendAt),
+    bySender: index("scheduled_messages_sender_idx").on(t.senderId),
   })
 );
 
@@ -469,3 +501,4 @@ export type Notification = typeof notifications.$inferSelect;
 export type Poll = typeof polls.$inferSelect;
 export type PollOption = typeof pollOptions.$inferSelect;
 export type PollVote = typeof pollVotes.$inferSelect;
+export type ScheduledMessage = typeof scheduledMessages.$inferSelect;

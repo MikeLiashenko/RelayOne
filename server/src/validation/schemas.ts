@@ -174,11 +174,20 @@ export const sendMessageSchema = z
     content: z.string().trim().max(8000).optional(),
     attachmentIds: z.array(z.string().uuid()).max(20).optional(),
     replyToId: z.string().uuid().optional(),
+    // Self-destruct: delete the message this many seconds after it's sent.
+    ttlSeconds: z.number().int().min(1).max(604800).optional(),
   })
   .refine(
     (v) => (v.content && v.content.length > 0) || (v.attachmentIds?.length ?? 0) > 0,
     "A message needs text or at least one attachment."
   );
+
+export const scheduleMessageSchema = z.object({
+  content: z.string().trim().min(1).max(8000),
+  sendAt: z.coerce.date(),
+  ttlSeconds: z.number().int().min(1).max(604800).optional(),
+  replyToId: z.string().uuid().optional(),
+});
 
 export const userSearchSchema = z.object({
   q: z.string().trim().min(1).max(80),

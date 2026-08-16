@@ -41,6 +41,11 @@ export const api = {
 
   // Polls & quizzes.
   createPoll: (chatId, body) => apiFetch(`/chats/${chatId}/polls`, { method: "POST", body }),
+
+  // Scheduled messages.
+  scheduleMessage: (chatId, body) => apiFetch(`/chats/${chatId}/schedule`, { method: "POST", body }),
+  listScheduled: (chatId) => apiFetch(`/chats/${chatId}/scheduled`),
+  cancelScheduled: (id) => apiFetch(`/scheduled/${id}`, { method: "DELETE" }),
   votePoll: (pollId, optionIds) =>
     apiFetch(`/polls/${pollId}/vote`, { method: "POST", body: { optionIds } }),
   closePoll: (pollId) => apiFetch(`/polls/${pollId}/close`, { method: "POST" }),

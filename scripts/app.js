@@ -230,6 +230,16 @@ function wireStaticUI() {
     if (e.target === e.currentTarget) closePollModal();
   });
 
+  // ⏱ Self-destruct + 🕒 Scheduled.
+  $('[data-action="self-destruct"]').addEventListener("click", (e) => toggleTtlPicker(e.currentTarget));
+  $('[data-action="schedule"]').addEventListener("click", openScheduleModal);
+  $('[data-action="close-schedule"]').addEventListener("click", closeScheduleModal);
+  $('[data-action="schedule-create"]').addEventListener("click", submitSchedule);
+  $('[data-role="schedule-modal"]').addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeScheduleModal();
+  });
+  updateTtlIndicator();
+
   $('[data-action="open-saved"]').addEventListener("click", openSaved);
   $('[data-action="jump-pin"]').addEventListener("click", jumpNextPin);
   $('[data-action="toggle-pins"]').addEventListener("click", togglePinsPanel);
@@ -590,6 +600,8 @@ async function openChat(id, highlightId = null) {
   clearPendingAttachments();
   updateReplyBar();
   restoreDraft(id);
+  selfDestructTtl = 0;
+  updateTtlIndicator();
   renderChatList();
 
   $('[data-role="pane-empty"]').hidden = true;
@@ -713,6 +725,7 @@ function renderMessages() {
     const node = messageNode(m);
     state.msgNodes.set(m.id, node);
     msgEl.append(node);
+    armSelfDestruct(m);
   }
   scrollToBottom();
   refreshReceipts();
@@ -798,6 +811,12 @@ function messageNode(m) {
           title: "Show edit history",
           onClick: (e) => { e.stopPropagation(); openHistory(m.id); },
         }, "edited")
+      : null,
+    m.expiresAt && !deleted
+      ? el("span", {
+          class: "msg__ttl",
+          title: "Self-destructs " + new Date(m.expiresAt).toLocaleString(),
+        }, "🕐")
       : null,
     el("span", { class: "msg__time" }, timeShort(m.createdAt)),
     mine && !deleted ? el("span", { class: "msg__receipt", dataset: { role: "receipt" } }, "✓") : null
@@ -905,6 +924,143 @@ function groupReactions(reactions = []) {
     map.set(r.emoji, cur);
   }
   return [...map.values()];
+}
+
+/* -- ⏱ Self-destruct + 🕒 Scheduled --------------------------------------- */
+
+let selfDestructTtl = 0;
+const TTL_OPTIONS = [
+  { label: "Off", secs: 0 },
+  { label: "10 seconds", secs: 10 },
+  { label: "1 minute", secs: 60 },
+  { label: "1 hour", secs: 3600 },
+  { label: "1 day", secs: 86400 },
+  { label: "1 week", secs: 604800 },
+];
+let ttlPickerEl = null;
+const sdTimers = new Map();
+
+function ttlShort(secs) {
+  if (secs >= 604800) return `${Math.round(secs / 604800)}w`;
+  if (secs >= 86400) return `${Math.round(secs / 86400)}d`;
+  if (secs >= 3600) return `${Math.round(secs / 3600)}h`;
+  if (secs >= 60) return `${Math.round(secs / 60)}m`;
+  return `${secs}s`;
+}
+function updateTtlIndicator() {
+  const btn = $('[data-action="self-destruct"]');
+  if (!btn) return;
+  btn.classList.toggle("is-active", selfDestructTtl > 0);
+  btn.textContent = selfDestructTtl > 0 ? `⏱${ttlShort(selfDestructTtl)}` : "⏱";
+  btn.title = selfDestructTtl > 0
+    ? `New messages self-destruct after ${ttlShort(selfDestructTtl)}`
+    : "Self-destruct timer";
+}
+function toggleTtlPicker(anchor) {
+  if (ttlPickerEl) return closeTtlPicker();
+  const pop = el("div", { class: "ttl-picker" });
+  for (const opt of TTL_OPTIONS) {
+    pop.append(el("button", {
+      class: "ttl-picker__btn" + (selfDestructTtl === opt.secs ? " is-active" : ""),
+      type: "button",
+      onClick: () => { selfDestructTtl = opt.secs; updateTtlIndicator(); closeTtlPicker(); },
+    }, opt.label));
+  }
+  document.body.append(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, r.left)}px`;
+  pop.style.top = `${r.top - pop.offsetHeight - 8}px`;
+  ttlPickerEl = pop;
+  setTimeout(() => document.addEventListener("click", ttlOutside), 0);
+}
+function ttlOutside(e) {
+  if (ttlPickerEl && !ttlPickerEl.contains(e.target) && !e.target.closest('[data-action="self-destruct"]')) {
+    closeTtlPicker();
+  }
+}
+function closeTtlPicker() {
+  ttlPickerEl?.remove();
+  ttlPickerEl = null;
+  document.removeEventListener("click", ttlOutside);
+}
+
+/** Locally tombstone a self-destruct message the instant it expires (the server
+ *  also sweeps + broadcasts, but this makes it feel exact). */
+function armSelfDestruct(m) {
+  if (!m.expiresAt || m.deletedAt || sdTimers.has(m.id)) return;
+  const ms = Date.parse(m.expiresAt) - Date.now();
+  const fire = () => {
+    sdTimers.delete(m.id);
+    const msg = state.messages.find((x) => x.id === m.id);
+    if (msg && !msg.deletedAt) {
+      msg.deletedAt = new Date().toISOString();
+      msg.content = null;
+      replaceMessageNode(msg);
+    }
+  };
+  if (ms <= 0) fire();
+  else sdTimers.set(m.id, setTimeout(fire, Math.min(ms, 2_000_000_000)));
+}
+
+/* Schedule modal */
+function openScheduleModal() {
+  if (!state.activeId) return;
+  $('[data-role="schedule-text"]').value = $('[data-role="composer-input"]').value.trim();
+  $('[data-role="schedule-when"]').value = toLocalDatetimeValue(new Date(Date.now() + 3600_000));
+  setScheduleError("");
+  $('[data-role="schedule-modal"]').hidden = false;
+  loadScheduled();
+}
+function closeScheduleModal() {
+  $('[data-role="schedule-modal"]').hidden = true;
+}
+function setScheduleError(msg) {
+  const e = $('[data-role="schedule-error"]');
+  e.textContent = msg;
+  e.hidden = !msg;
+}
+function toLocalDatetimeValue(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+async function submitSchedule() {
+  const content = $('[data-role="schedule-text"]').value.trim();
+  const whenVal = $('[data-role="schedule-when"]').value;
+  if (!content) return setScheduleError("Add a message.");
+  if (!whenVal) return setScheduleError("Pick a date and time.");
+  const when = new Date(whenVal);
+  if (isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+    return setScheduleError("Pick a time in the future.");
+  }
+  const body = { content, sendAt: when.toISOString() };
+  if (selfDestructTtl > 0) body.ttlSeconds = selfDestructTtl;
+  const r = await api.scheduleMessage(state.activeId, body);
+  if (!r.ok) return setScheduleError(r.error?.message || "Couldn’t schedule.");
+  $('[data-role="schedule-text"]').value = "";
+  toast(`Scheduled for ${when.toLocaleString()}`);
+  loadScheduled();
+}
+async function loadScheduled() {
+  const list = $('[data-role="scheduled-list"]');
+  clear(list);
+  const r = await api.listScheduled(state.activeId);
+  const items = r.ok ? r.data : [];
+  if (!items.length) {
+    list.append(el("div", { class: "shared-empty" }, "No scheduled messages."));
+    return;
+  }
+  list.append(el("div", { class: "schedule-pending__title" }, "Pending"));
+  for (const s of items) {
+    list.append(el("div", { class: "schedule-row" },
+      el("div", { class: "schedule-row__meta" },
+        el("span", { class: "schedule-row__text" }, s.content || "(no text)"),
+        el("span", { class: "schedule-row__when" }, new Date(s.sendAt).toLocaleString())),
+      el("button", { class: "schedule-row__cancel", type: "button", onClick: () => cancelScheduledMsg(s.id) }, "Cancel")));
+  }
+}
+async function cancelScheduledMsg(id) {
+  const r = await api.cancelScheduled(id);
+  if (r.ok) loadScheduled();
 }
 
 /* -- 📊 Polls & quizzes ---------------------------------------------------- */
@@ -1509,6 +1665,7 @@ async function submitComposer() {
       ...(content ? { content } : {}),
       ...(state.reply ? { replyToId: state.reply.id } : {}),
       ...(ready.length ? { attachmentIds: ready.map((a) => a.id) } : {}),
+      ...(selfDestructTtl > 0 ? { ttlSeconds: selfDestructTtl } : {}),
     });
   }
 
@@ -1690,6 +1847,7 @@ function wireProfileForms() {
     else if (!$('[data-role="thread-modal"]').hidden) closeThread();
     else if (!$('[data-role="history-modal"]').hidden) closeHistory();
     else if (!$('[data-role="poll-modal"]').hidden) closePollModal();
+    else if (!$('[data-role="schedule-modal"]').hidden) closeScheduleModal();
   });
 }
 
@@ -3015,6 +3173,7 @@ function onNewMessage(message) {
     const node = messageNode(message);
     state.msgNodes.set(message.id, node);
     msgEl.append(node);
+    armSelfDestruct(message);
 
     // 🧵 A reply bumps its parent's thread count (badge appears/updates live).
     if (message.replyTo) {

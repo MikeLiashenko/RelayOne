@@ -4,12 +4,14 @@ import { getAuth, requireAuth } from "../../auth/middleware";
 import { chatService } from "../../services/chatService";
 import { messageService } from "../../services/messageService";
 import { pollService } from "../../services/pollService";
+import { schedulerService } from "../../services/schedulerService";
 import { hub } from "../../realtime/hub";
 import { parse } from "../../validation/parse";
 import {
   createChatSchema,
   createPollSchema,
   listMessagesSchema,
+  scheduleMessageSchema,
   sendMessageSchema,
 } from "../../validation/schemas";
 import { asyncHandler, sendData } from "../middleware/http";
@@ -40,6 +42,27 @@ chatsRouter.get(
     const id = parse(idParam, req.params.id);
     const { type } = parse(sharedQuery, req.query);
     sendData(res, await messageService.listShared(id, user.id, type));
+  })
+);
+
+/** Queue a message to be sent later. */
+chatsRouter.post(
+  "/:id/schedule",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const input = parse(scheduleMessageSchema, req.body);
+    sendData(res, await schedulerService.schedule(id, user.id, input), 201);
+  })
+);
+
+/** The caller's pending scheduled messages in a chat. */
+chatsRouter.get(
+  "/:id/scheduled",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    sendData(res, await schedulerService.listForChat(id, user.id));
   })
 );
 
