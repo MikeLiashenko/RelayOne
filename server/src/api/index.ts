@@ -14,6 +14,7 @@ import { profilesRouter } from "./routes/profiles.routes";
 import { pushRouter } from "./routes/push.routes";
 import { scheduledRouter } from "./routes/scheduled.routes";
 import { sessionsRouter } from "./routes/sessions.routes";
+import { spacesRouter } from "./routes/spaces.routes";
 import { uploadsRouter } from "./routes/uploads.routes";
 import { usersRouter } from "./routes/users.routes";
 
@@ -36,6 +37,7 @@ export function createApp(): Express {
   app.use("/api/users", usersRouter);
   app.use("/api/profiles", profilesRouter);
   app.use("/api/chats", chatsRouter);
+  app.use("/api/spaces", spacesRouter);
   app.use("/api/messages", messagesRouter);
   app.use("/api/polls", pollsRouter);
   app.use("/api/scheduled", scheduledRouter);

@@ -132,6 +132,43 @@ export interface PublicReaction {
   userId: string;
 }
 
+/* -- Spaces (communities) -------------------------------------------------- */
+
+export type SpaceRole = "owner" | "admin" | "moderator" | "member";
+
+export interface PublicSpaceChannel {
+  id: string;
+  chatId: string;
+  name: string;
+  icon: string | null;
+  kind: "text" | "announcement" | "voice";
+  position: number;
+}
+
+export interface PublicSpaceMember {
+  user: PublicUser;
+  role: SpaceRole;
+  joinedAt: string;
+}
+
+/** Space list row — enough to render the Spaces rail. */
+export interface PublicSpace {
+  id: string;
+  name: string;
+  description: string | null;
+  avatarUrl: string | null;
+  memberCount: number;
+  /** The requesting user's role, when they're a member. */
+  myRole: SpaceRole | null;
+  createdAt: string;
+}
+
+/** Full Space view: channels + members + the caller's role. */
+export interface SpaceDetail extends PublicSpace {
+  channels: PublicSpaceChannel[];
+  members: PublicSpaceMember[];
+}
+
 export interface PublicNotification {
   id: string;
   type: string;

@@ -25,6 +25,17 @@ export const verificationPurposeEnum = pgEnum("verification_purpose", [
 ]);
 export const chatTypeEnum = pgEnum("chat_type", ["direct", "group", "channel", "saved"]);
 export const memberRoleEnum = pgEnum("member_role", ["owner", "admin", "member"]);
+export const spaceRoleEnum = pgEnum("space_role", [
+  "owner",
+  "admin",
+  "moderator",
+  "member",
+]);
+export const spaceChannelKindEnum = pgEnum("space_channel_kind", [
+  "text",
+  "announcement",
+  "voice",
+]);
 export const attachmentKindEnum = pgEnum("attachment_kind", [
   "image",
   "video",
@@ -171,11 +182,17 @@ export const chats = pgTable(
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
+    // When set, this chat is a channel inside a Space (excluded from the normal
+    // chat list; browsed through the Space view instead).
+    spaceId: uuid("space_id").references((): AnyPgColumn => spaces.id, {
+      onDelete: "cascade",
+    }),
     createdAt,
     updatedAt,
   },
   (t) => ({
     byType: index("chats_type_idx").on(t.type),
+    bySpace: index("chats_space_id_idx").on(t.spaceId),
   })
 );
 
@@ -453,6 +470,82 @@ export const messageEdits = pgTable(
 );
 
 /* ==========================================================================
+   spaces — communities (Discord-like) with nested channels and roles
+
+   A Space groups people around channels. Each channel is backed by a normal
+   `chats` row (so messages, reactions, threads, polls and shared media all work
+   unchanged); `space_channels` adds the channel's Space metadata (icon, kind,
+   ordering). Membership + roles live in `space_members`; joining a Space adds
+   the user to every channel chat, so the existing per-chat authorization and
+   realtime fan-out keep working with no changes.
+   ========================================================================== */
+
+export const spaces = pgTable(
+  "spaces",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    avatarUrl: text("avatar_url"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (t) => ({
+    byCreator: index("spaces_created_by_idx").on(t.createdBy),
+  })
+);
+
+export const spaceMembers = pgTable(
+  "space_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    spaceId: uuid("space_id")
+      .notNull()
+      .references(() => spaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: spaceRoleEnum("role").notNull().default("member"),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    memberUnique: uniqueIndex("space_members_space_user_unique").on(
+      t.spaceId,
+      t.userId
+    ),
+    byUser: index("space_members_user_id_idx").on(t.userId),
+  })
+);
+
+export const spaceChannels = pgTable(
+  "space_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    spaceId: uuid("space_id")
+      .notNull()
+      .references(() => spaces.id, { onDelete: "cascade" }),
+    // The backing chat that actually holds this channel's messages.
+    chatId: uuid("chat_id")
+      .notNull()
+      .references(() => chats.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    icon: text("icon"),
+    kind: spaceChannelKindEnum("kind").notNull().default("text"),
+    position: integer("position").notNull().default(0),
+    createdAt,
+  },
+  (t) => ({
+    bySpace: index("space_channels_space_id_idx").on(t.spaceId),
+    chatUnique: uniqueIndex("space_channels_chat_id_unique").on(t.chatId),
+  })
+);
+
+/* ==========================================================================
    notifications
    ========================================================================== */
 
@@ -502,3 +595,7 @@ export type Poll = typeof polls.$inferSelect;
 export type PollOption = typeof pollOptions.$inferSelect;
 export type PollVote = typeof pollVotes.$inferSelect;
 export type ScheduledMessage = typeof scheduledMessages.$inferSelect;
+export type Space = typeof spaces.$inferSelect;
+export type SpaceMember = typeof spaceMembers.$inferSelect;
+export type SpaceChannel = typeof spaceChannels.$inferSelect;
+export type SpaceRole = (typeof spaceRoleEnum.enumValues)[number];

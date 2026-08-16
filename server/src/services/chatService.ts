@@ -1,4 +1,6 @@
 import { and, count, desc, eq, gt, inArray, isNull, ne } from "drizzle-orm";
+// `isNull(chats.spaceId)` keeps Space channels out of the normal chat list and
+// the "contacts" peer set — they're browsed through the Space view instead.
 import { getDb } from "../db";
 import {
   chatMembers,
@@ -64,8 +66,13 @@ export const chatService = {
     const peers = await getDb()
       .selectDistinct({ userId: chatMembers.userId })
       .from(chatMembers)
+      .innerJoin(chats, eq(chats.id, chatMembers.chatId))
       .where(
-        and(inArray(chatMembers.chatId, chatIds), ne(chatMembers.userId, userId))
+        and(
+          inArray(chatMembers.chatId, chatIds),
+          ne(chatMembers.userId, userId),
+          isNull(chats.spaceId)
+        )
       );
     return peers.map((p) => p.userId);
   },
@@ -184,7 +191,10 @@ export const chatService = {
       .where(eq(chatMembers.userId, userId));
     const ids = rows.map((r) => r.chatId);
     if (ids.length === 0) return [];
-    const chatRows = await getDb().select().from(chats).where(inArray(chats.id, ids));
+    const chatRows = await getDb()
+      .select()
+      .from(chats)
+      .where(and(inArray(chats.id, ids), isNull(chats.spaceId)));
     return Promise.all(chatRows.map((c) => this.toPublic(c)));
   },
 
@@ -198,10 +208,11 @@ export const chatService = {
     if (myRows.length === 0) return [];
 
     const chatIds = myRows.map((r) => r.chatId);
+    // Space channels don't appear in the normal chat list (browsed via Spaces).
     const chatRows = await db
       .select()
       .from(chats)
-      .where(inArray(chats.id, chatIds));
+      .where(and(inArray(chats.id, chatIds), isNull(chats.spaceId)));
 
     const memberRows = await db
       .select({ chatId: chatMembers.chatId, user: users })

@@ -63,6 +63,8 @@ export type ServerEvent =
       at: string;
     }
   | { type: "notification"; notification: PublicNotification }
+  /* -- Spaces (communities) -- Members re-fetch the Space on any change. -- */
+  | { type: "space.updated"; spaceId: string }
   /* -- Calls (voice/video signaling) -- */
   | { type: "call.invite"; callId: string; chatId: string; fromUserId: string; media: CallMedia }
   | { type: "call.accept"; callId: string; fromUserId: string }

@@ -7,6 +7,8 @@ import type {
   Poll,
   PollOption,
   PollVote,
+  Space,
+  SpaceChannel,
   User,
 } from "../db/schema";
 import { env } from "../config/env";
@@ -17,8 +19,11 @@ import type {
   PublicNotification,
   PublicPoll,
   PublicReaction,
+  PublicSpace,
+  PublicSpaceChannel,
   PublicUser,
   SelfUser,
+  SpaceRole,
 } from "./types";
 
 /**
@@ -174,6 +179,32 @@ export function toPublicMessage(
     poll: null,
     attachments: m.deletedAt ? [] : attachments.map(toPublicAttachment),
     reactions: reactions.map(toPublicReaction),
+  };
+}
+
+export function toPublicSpaceChannel(c: SpaceChannel): PublicSpaceChannel {
+  return {
+    id: c.id,
+    chatId: c.chatId,
+    name: c.name,
+    icon: c.icon,
+    kind: c.kind,
+    position: c.position,
+  };
+}
+
+export function toPublicSpace(
+  space: Space,
+  opts: { memberCount: number; myRole: SpaceRole | null }
+): PublicSpace {
+  return {
+    id: space.id,
+    name: space.name,
+    description: space.description,
+    avatarUrl: space.avatarUrl,
+    memberCount: opts.memberCount,
+    myRole: opts.myRole,
+    createdAt: space.createdAt.toISOString(),
   };
 }
 

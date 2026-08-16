@@ -22,6 +22,7 @@ import { hub } from "../realtime/hub";
 import { chatService } from "./chatService";
 import { notificationService } from "./notificationService";
 import { pushService } from "./pushService";
+import { spaceService } from "./spaceService";
 
 /**
  * Messages: create, list, edit, soft-delete, react. Every operation is
@@ -239,7 +240,9 @@ export const messageService = {
       ttlSeconds?: number;
     }
   ): Promise<PublicMessage> {
-    await chatService.assertMember(chatId, senderId);
+    const chat = await chatService.assertMember(chatId, senderId);
+    // Announcement channels in a Space are moderator+ only (no-op elsewhere).
+    await spaceService.assertCanPost(chat, senderId);
     const db = getDb();
     const expiresAt =
       input.ttlSeconds && input.ttlSeconds > 0

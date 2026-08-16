@@ -167,6 +167,23 @@ export const createChatSchema = z
     }
   });
 
+/* -- Spaces (communities) -------------------------------------------------- */
+
+export const createSpaceSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(280).optional(),
+});
+
+export const createSpaceChannelSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  icon: z.string().trim().max(8).optional(),
+  kind: z.enum(["text", "announcement", "voice"]).default("text"),
+});
+
+export const updateSpaceMemberSchema = z.object({
+  role: z.enum(["admin", "moderator", "member"]),
+});
+
 /* -- Messages -------------------------------------------------------------- */
 
 export const sendMessageSchema = z
