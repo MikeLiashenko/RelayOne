@@ -1,13 +1,15 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   chatMembers,
   chats,
+  messages,
   spaceChannels,
   spaceMembers,
   spaces,
   users,
   type Chat,
+  type SpaceChannelKind,
   type SpaceRole,
 } from "../db/schema";
 import { AppError } from "../shared/errors";
@@ -25,25 +27,60 @@ import { hub } from "../realtime/hub";
 
 /** Role ranking for permission checks (higher = more powerful). */
 const RANK: Record<SpaceRole, number> = {
-  owner: 3,
-  admin: 2,
-  moderator: 1,
+  owner: 4,
+  admin: 3,
+  moderator: 2,
+  contributor: 1,
   member: 0,
 };
+const rankOf = (role: string | null | undefined): number =>
+  RANK[(role as SpaceRole) ?? "member"] ?? 0;
 
-/** The channels every new Space starts with. */
-const DEFAULT_CHANNELS: Array<{
+type ChannelSeed = {
   name: string;
   icon: string;
-  kind: "text" | "announcement" | "voice";
-}> = [
-  { name: "general", icon: "💬", kind: "text" },
-  { name: "announcements", icon: "📢", kind: "announcement" },
-  { name: "photos", icon: "📸", kind: "text" },
-  { name: "voice", icon: "🎙️", kind: "voice" },
-  { name: "polls", icon: "📊", kind: "text" },
-  { name: "calls", icon: "🔊", kind: "voice" },
+  kind: SpaceChannelKind;
+  category: string;
+};
+
+/**
+ * The channels every new Space starts with, grouped into sidebar sections.
+ * "Home" is a virtual view (not a channel), so it isn't seeded here.
+ */
+const DEFAULT_CHANNELS: ChannelSeed[] = [
+  { name: "announcements", icon: "📢", kind: "announcement", category: "Overview" },
+  { name: "general", icon: "💬", kind: "text", category: "Channels" },
+  { name: "discussions", icon: "🧵", kind: "forum", category: "Channels" },
+  { name: "media", icon: "📸", kind: "text", category: "Channels" },
+  { name: "polls", icon: "📊", kind: "poll", category: "Channels" },
+  { name: "lounge", icon: "🔊", kind: "voice", category: "Voice" },
+  { name: "voice", icon: "🎙️", kind: "voice", category: "Voice" },
 ];
+
+/** Slugify a name into a candidate @handle. */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  return base || "space";
+}
+
+/** Default sidebar section for a channel when none is given. */
+function sectionFor(category: string | undefined, kind: SpaceChannelKind): string {
+  if (category && category.trim()) return category.trim().slice(0, 40);
+  if (kind === "voice" || kind === "video") return "Voice";
+  if (kind === "announcement") return "Overview";
+  return "Channels";
+}
+
+/** Order sidebar sections predictably; unknown sections fall after the known ones. */
+const SECTION_ORDER = ["Overview", "Channels", "Voice"];
+function sectionRank(name: string): number {
+  const i = SECTION_ORDER.indexOf(name);
+  return i === -1 ? SECTION_ORDER.length : i;
+}
 
 /**
  * Spaces — communities with nested channels and a role hierarchy
@@ -60,7 +97,7 @@ export const spaceService = {
       .from(spaceMembers)
       .where(and(eq(spaceMembers.spaceId, spaceId), eq(spaceMembers.userId, userId)))
       .limit(1);
-    return row?.role ?? null;
+    return (row?.role as SpaceRole) ?? null;
   },
 
   /** Throws unless `userId` is a member; returns their role. */
@@ -76,7 +113,7 @@ export const spaceService = {
     min: SpaceRole
   ): Promise<SpaceRole> {
     const role = await this.assertMember(spaceId, userId);
-    if (RANK[role] < RANK[min]) {
+    if (rankOf(role) < RANK[min]) {
       throw AppError.forbidden("You don’t have permission to do that in this Space.");
     }
     return role;
@@ -90,15 +127,38 @@ export const spaceService = {
     return rows.map((r) => r.userId);
   },
 
+  /** A free @handle derived from `desired` (or a name), suffixed if taken. */
+  async freeHandle(desired: string): Promise<string> {
+    const db = getDb();
+    const base = slugify(desired);
+    for (let i = 0; i < 50; i++) {
+      const candidate = i === 0 ? base : `${base}-${i}`;
+      const [clash] = await db
+        .select({ id: spaces.id })
+        .from(spaces)
+        .where(eq(spaces.handle, candidate))
+        .limit(1);
+      if (!clash) return candidate;
+    }
+    return `${base}-${Math.floor(performance.now())}`;
+  },
+
   /** Create a Space, seed its default channels, and make the caller owner. */
   async createSpace(
     ownerId: string,
-    input: { name: string; description?: string }
+    input: { name: string; description?: string; visibility?: "public" | "private" }
   ): Promise<SpaceDetail> {
     const db = getDb();
+    const handle = await this.freeHandle(input.name);
     const [space] = await db
       .insert(spaces)
-      .values({ name: input.name, description: input.description ?? null, createdBy: ownerId })
+      .values({
+        name: input.name,
+        handle,
+        description: input.description ?? null,
+        visibility: input.visibility ?? "private",
+        createdBy: ownerId,
+      })
       .returning();
 
     await db.insert(spaceMembers).values({ spaceId: space!.id, userId: ownerId, role: "owner" });
@@ -111,13 +171,60 @@ export const spaceService = {
     return this.getDetail(space!.id, ownerId);
   },
 
+  /** Edit a Space's object fields (admin+). Handle is validated for uniqueness. */
+  async updateSpace(
+    spaceId: string,
+    userId: string,
+    patch: {
+      name?: string;
+      handle?: string;
+      description?: string | null;
+      avatarUrl?: string | null;
+      bannerUrl?: string | null;
+      visibility?: "public" | "private";
+    }
+  ): Promise<SpaceDetail> {
+    await this.assertAtLeast(spaceId, userId, "admin");
+    const db = getDb();
+    const set: Record<string, unknown> = {};
+    if (patch.name !== undefined) set.name = patch.name;
+    if (patch.description !== undefined) set.description = patch.description;
+    if (patch.avatarUrl !== undefined) set.avatarUrl = patch.avatarUrl;
+    if (patch.bannerUrl !== undefined) set.bannerUrl = patch.bannerUrl;
+    if (patch.visibility !== undefined) set.visibility = patch.visibility;
+    if (patch.handle !== undefined) {
+      const slug = slugify(patch.handle);
+      const [owner] = await db
+        .select({ id: spaces.id })
+        .from(spaces)
+        .where(eq(spaces.handle, slug))
+        .limit(1);
+      if (owner && owner.id !== spaceId) {
+        throw AppError.validation("That handle is already taken.");
+      }
+      set.handle = slug;
+    }
+    if (Object.keys(set).length) {
+      set.updatedAt = new Date();
+      await db.update(spaces).set(set).where(eq(spaces.id, spaceId));
+    }
+    await this.notify(spaceId);
+    return this.getDetail(spaceId, userId);
+  },
+
   /**
    * Create a channel row + its backing group chat, and add every current Space
    * member to that chat so messaging/realtime just works.
    */
   async insertChannel(
     spaceId: string,
-    input: { name: string; icon?: string; kind: "text" | "announcement" | "voice"; position: number }
+    input: {
+      name: string;
+      icon?: string;
+      kind: SpaceChannelKind;
+      category?: string;
+      position: number;
+    }
   ): Promise<PublicSpaceChannel> {
     const db = getDb();
     const [chat] = await db
@@ -140,6 +247,7 @@ export const spaceService = {
         name: input.name,
         icon: input.icon ?? null,
         kind: input.kind,
+        category: sectionFor(input.category, input.kind),
         position: input.position,
       })
       .returning();
@@ -151,7 +259,7 @@ export const spaceService = {
   async createChannel(
     spaceId: string,
     userId: string,
-    input: { name: string; icon?: string; kind: "text" | "announcement" | "voice" }
+    input: { name: string; icon?: string; kind: SpaceChannelKind; category?: string }
   ): Promise<PublicSpaceChannel> {
     await this.assertAtLeast(spaceId, userId, "admin");
     const existing = await getDb()
@@ -227,7 +335,7 @@ export const spaceService = {
     spaceId: string,
     actorId: string,
     targetId: string,
-    role: "admin" | "moderator" | "member"
+    role: "admin" | "moderator" | "contributor" | "member"
   ): Promise<SpaceDetail> {
     const actorRole = await this.assertAtLeast(spaceId, actorId, "admin");
     if (targetId === actorId) throw AppError.validation("You can’t change your own role.");
@@ -235,7 +343,7 @@ export const spaceService = {
     if (!targetRole) throw AppError.notFound("That person isn’t in this Space.");
     if (targetRole === "owner") throw AppError.forbidden("You can’t change the owner’s role.");
     // Admins can only act strictly below themselves (and can't mint new admins).
-    if (RANK[actorRole] <= RANK[targetRole] && actorRole !== "owner") {
+    if (rankOf(actorRole) <= rankOf(targetRole) && actorRole !== "owner") {
       throw AppError.forbidden("You can’t change the role of someone at or above your level.");
     }
     if (role === "admin" && actorRole !== "owner") {
@@ -255,7 +363,7 @@ export const spaceService = {
     if (targetId === actorId) throw AppError.validation("Use “Leave” to remove yourself.");
     const targetRole = await this.getRole(spaceId, targetId);
     if (!targetRole) throw AppError.notFound("That person isn’t in this Space.");
-    if (RANK[actorRole] <= RANK[targetRole]) {
+    if (rankOf(actorRole) <= rankOf(targetRole)) {
       throw AppError.forbidden("You can’t remove someone at or above your level.");
     }
     await this.removeMemberRows(spaceId, targetId);
@@ -288,12 +396,19 @@ export const spaceService = {
       .from(spaceMembers)
       .where(inArray(spaceMembers.spaceId, spaceIds));
     const countBySpace = new Map<string, number>();
-    for (const c of counts) countBySpace.set(c.spaceId, (countBySpace.get(c.spaceId) ?? 0) + 1);
+    const onlineBySpace = new Map<string, number>();
+    for (const c of counts) {
+      countBySpace.set(c.spaceId, (countBySpace.get(c.spaceId) ?? 0) + 1);
+      if (hub.isOnline(c.userId)) {
+        onlineBySpace.set(c.spaceId, (onlineBySpace.get(c.spaceId) ?? 0) + 1);
+      }
+    }
 
     return spaceRows.map((s) =>
       toPublicSpace(s, {
         memberCount: countBySpace.get(s.id) ?? 0,
-        myRole: roleBySpace.get(s.id) ?? null,
+        onlineCount: onlineBySpace.get(s.id) ?? 0,
+        myRole: (roleBySpace.get(s.id) as SpaceRole) ?? null,
       })
     );
   },
@@ -317,16 +432,54 @@ export const spaceService = {
       .innerJoin(users, eq(users.id, spaceMembers.userId))
       .where(eq(spaceMembers.spaceId, spaceId));
 
+    const onlineCount = memberRows.filter((m) => hub.isOnline(m.user.id)).length;
+
+    // Channels grouped: order by section, then position within the section.
+    const channels = channelRows
+      .map(toPublicSpaceChannel)
+      .sort((a, b) => sectionRank(a.category) - sectionRank(b.category) || a.position - b.position);
+
     return {
-      ...toPublicSpace(space, { memberCount: memberRows.length, myRole }),
-      channels: channelRows.map(toPublicSpaceChannel),
+      ...toPublicSpace(space, { memberCount: memberRows.length, onlineCount, myRole }),
+      channels,
       members: memberRows
         .map((m) => ({
           user: toPublicUser(m.user),
-          role: m.role,
+          role: m.role as SpaceRole,
           joinedAt: m.joinedAt.toISOString(),
         }))
-        .sort((a, b) => RANK[b.role] - RANK[a.role]),
+        .sort((a, b) => rankOf(b.role) - rankOf(a.role)),
+      latestAnnouncement: await this.latestAnnouncement(spaceId),
+    };
+  },
+
+  /** Newest message posted in any announcement channel of the Space (for Home). */
+  async latestAnnouncement(spaceId: string): Promise<SpaceDetail["latestAnnouncement"]> {
+    const db = getDb();
+    const announceChannels = await db
+      .select()
+      .from(spaceChannels)
+      .where(and(eq(spaceChannels.spaceId, spaceId), eq(spaceChannels.kind, "announcement")));
+    if (announceChannels.length === 0) return null;
+
+    const chatIds = announceChannels.map((c) => c.chatId);
+    const [msg] = await db
+      .select()
+      .from(messages)
+      .where(and(inArray(messages.chatId, chatIds), isNull(messages.deletedAt)))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+    if (!msg) return null;
+
+    const channel = announceChannels.find((c) => c.chatId === msg.chatId)!;
+    const [sender] = await db.select().from(users).where(eq(users.id, msg.senderId)).limit(1);
+    return {
+      channelId: channel.id,
+      chatId: msg.chatId,
+      content: msg.content,
+      senderId: msg.senderId,
+      senderName: sender?.displayName ?? "Someone",
+      createdAt: msg.createdAt.toISOString(),
     };
   },
 
@@ -343,7 +496,7 @@ export const spaceService = {
       .limit(1);
     if (!channel || channel.kind !== "announcement") return;
     const role = await this.getRole(chat.spaceId, userId);
-    if (!role || RANK[role] < RANK.moderator) {
+    if (!role || rankOf(role) < RANK.moderator) {
       throw AppError.forbidden("Only moderators and admins can post in an announcement channel.");
     }
   },

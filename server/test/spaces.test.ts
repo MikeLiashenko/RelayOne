@@ -22,15 +22,73 @@ describe("spaces (communities)", () => {
 
     expect(space.myRole).toBe("owner");
     expect(space.memberCount).toBe(1);
-    // Six default channels, general first.
-    expect(space.channels).toHaveLength(6);
-    expect(space.channels[0].name).toBe("general");
-    expect(space.channels.map((c: any) => c.kind)).toContain("announcement");
+    // A generated @handle + private by default.
+    expect(space.handle).toBe("photography");
+    expect(space.visibility).toBe("private");
+    // Seven default channels grouped into sections; Overview (announcements) first.
+    expect(space.channels).toHaveLength(7);
+    expect(space.channels[0].category).toBe("Overview");
+    expect(space.channels.map((c: any) => c.kind)).toEqual(
+      expect.arrayContaining(["announcement", "forum", "poll", "voice"])
+    );
+    const discussions = space.channels.find((c: any) => c.name === "discussions");
+    expect(discussions.kind).toBe("forum");
+    expect(discussions.category).toBe("Channels");
 
     // Owner listing includes it.
     const list = await request(app).get("/api/spaces").set(bearer(owner.token));
     expect(list.body.data).toHaveLength(1);
     expect(list.body.data[0].id).toBe(space.id);
+  });
+
+  it("generates unique handles and lets admins edit the Space", async () => {
+    const owner = await registerUser(app, { email: "sph@relayone.test", username: "sp_h" });
+    const a = await makeSpace(owner.token, "Storm Community");
+    const b = await makeSpace(owner.token, "Storm Community");
+    expect(a.handle).toBe("storm-community");
+    expect(b.handle).toBe("storm-community-1"); // suffixed to stay unique
+
+    const edit = await request(app)
+      .patch(`/api/spaces/${a.id}`)
+      .set(bearer(owner.token))
+      .send({ description: "Chasing storms", visibility: "public", handle: "storms" });
+    expect(edit.status).toBe(200);
+    expect(edit.body.data.description).toBe("Chasing storms");
+    expect(edit.body.data.visibility).toBe("public");
+    expect(edit.body.data.handle).toBe("storms");
+
+    // Taking an already-used handle is rejected.
+    const clash = await request(app)
+      .patch(`/api/spaces/${b.id}`)
+      .set(bearer(owner.token))
+      .send({ handle: "storms" });
+    expect(clash.status).toBe(400);
+  });
+
+  it("surfaces the latest announcement for the Home screen", async () => {
+    const owner = await registerUser(app, { email: "spa@relayone.test", username: "sp_a" });
+    const space = await makeSpace(owner.token);
+    const announce = space.channels.find((c: any) => c.kind === "announcement");
+    await request(app)
+      .post(`/api/chats/${announce.chatId}/messages`)
+      .set(bearer(owner.token))
+      .send({ content: "Big storm incoming 🌩️" });
+
+    const detail = await request(app).get(`/api/spaces/${space.id}`).set(bearer(owner.token));
+    expect(detail.body.data.latestAnnouncement.content).toBe("Big storm incoming 🌩️");
+    expect(detail.body.data.latestAnnouncement.senderName).toBeTruthy();
+  });
+
+  it("creates a typed, categorized channel", async () => {
+    const owner = await registerUser(app, { email: "spt@relayone.test", username: "sp_t" });
+    const space = await makeSpace(owner.token);
+    const created = await request(app)
+      .post(`/api/spaces/${space.id}/channels`)
+      .set(bearer(owner.token))
+      .send({ name: "forecasts", kind: "forum", category: "Channels", icon: "🧵" });
+    expect(created.status).toBe(201);
+    expect(created.body.data.kind).toBe("forum");
+    expect(created.body.data.category).toBe("Channels");
   });
 
   it("keeps Space channels out of the normal chat list", async () => {

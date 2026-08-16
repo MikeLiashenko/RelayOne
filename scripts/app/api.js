@@ -56,6 +56,7 @@ export const api = {
   listSpaces: () => apiFetch("/spaces"),
   getSpace: (id) => apiFetch(`/spaces/${id}`),
   createSpace: (body) => apiFetch("/spaces", { method: "POST", body }),
+  updateSpace: (id, patch) => apiFetch(`/spaces/${id}`, { method: "PATCH", body: patch }),
   deleteSpace: (id) => apiFetch(`/spaces/${id}`, { method: "DELETE" }),
   joinSpace: (id) => apiFetch(`/spaces/${id}/join`, { method: "POST" }),
   leaveSpace: (id) => apiFetch(`/spaces/${id}/leave`, { method: "POST" }),

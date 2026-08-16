@@ -169,19 +169,47 @@ export const createChatSchema = z
 
 /* -- Spaces (communities) -------------------------------------------------- */
 
+const spaceChannelKind = z.enum([
+  "text",
+  "forum",
+  "announcement",
+  "poll",
+  "voice",
+  "video",
+]);
+
 export const createSpaceSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(280).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
 });
+
+export const updateSpaceSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    handle: z
+      .string()
+      .trim()
+      .min(2)
+      .max(24)
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/, "Handles use letters, numbers and hyphens.")
+      .optional(),
+    description: z.string().trim().max(280).nullable().optional(),
+    avatarUrl: z.string().url().max(2048).nullable().optional(),
+    bannerUrl: z.string().url().max(2048).nullable().optional(),
+    visibility: z.enum(["public", "private"]).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "No fields to update.");
 
 export const createSpaceChannelSchema = z.object({
   name: z.string().trim().min(1).max(60),
   icon: z.string().trim().max(8).optional(),
-  kind: z.enum(["text", "announcement", "voice"]).default("text"),
+  kind: spaceChannelKind.default("text"),
+  category: z.string().trim().max(40).optional(),
 });
 
 export const updateSpaceMemberSchema = z.object({
-  role: z.enum(["admin", "moderator", "member"]),
+  role: z.enum(["admin", "moderator", "contributor", "member"]),
 });
 
 /* -- Messages -------------------------------------------------------------- */

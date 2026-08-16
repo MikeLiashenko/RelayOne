@@ -1,20 +1,45 @@
 /**
- * RelayOne Spaces — communities UI (Discord-like).
+ * RelayOne Spaces — communities UI.
  *
- * Self-contained overlay: a list of the Spaces you're in, and a detail view
- * with channels + members + role-gated management. Channels are backed by
- * normal chats, so opening a text channel hands off to the app's regular chat
- * view; voice channels start a group call. All DOM is built with `el()` and
- * user content goes through textContent — never innerHTML.
+ * A Space is a place, not a Discord server: opening one lands on **Home**
+ * (welcome, members/online, latest announcement, a way in), with a left rail of
+ * grouped, typed channels and a members view. Text/forum/poll channels hand off
+ * to the app's chat view; voice/video channels start a call. All DOM is built
+ * with `el()` and user content goes through textContent — never innerHTML.
  */
-import { $, clear, el, initials, avatarHue } from "../dom.js";
+import { clear, el, initials, avatarHue } from "../dom.js";
 
-const RANK = { owner: 3, admin: 2, moderator: 1, member: 0 };
-const ROLE_LABEL = { owner: "Owner", admin: "Admin", moderator: "Moderator", member: "Member" };
+const RANK = { owner: 4, admin: 3, moderator: 2, contributor: 1, member: 0 };
+const ROLE_LABEL = {
+  owner: "Owner",
+  admin: "Admin",
+  moderator: "Moderator",
+  contributor: "Contributor",
+  member: "Member",
+};
+const KIND_ICON = {
+  text: "#",
+  forum: "🧵",
+  announcement: "📢",
+  poll: "📊",
+  voice: "🔊",
+  video: "🎥",
+};
+const KIND_LABEL = {
+  text: "💬 Text",
+  forum: "🧵 Forum",
+  announcement: "📢 Announcement",
+  poll: "📊 Poll",
+  voice: "🔊 Voice",
+  video: "🎥 Video",
+};
+const SECTION_ORDER = ["Overview", "Channels", "Voice"];
+const isCall = (kind) => kind === "voice" || kind === "video";
 
 export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   let root = null;
-  let view = "list"; // "list" | "detail"
+  let view = "list"; // "list" | "space"
+  let mainView = "home"; // within a space: "home" | "members"
   let spaces = [];
   let current = null; // SpaceDetail
   let busy = false;
@@ -39,11 +64,12 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     await loadList();
   }
 
-  /** Re-show the detail view for a Space (used by the chat "back" button). */
+  /** Re-show a Space (used by the chat "back" button). */
   async function reopenSpace(spaceId) {
     mount();
     root.hidden = false;
-    await openDetail(spaceId);
+    mainView = "home";
+    await openSpace(spaceId);
   }
 
   async function loadList() {
@@ -53,8 +79,8 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     if (view === "list") renderList();
   }
 
-  async function openDetail(spaceId) {
-    view = "detail";
+  async function openSpace(spaceId) {
+    view = "space";
     renderLoading("Opening Space…");
     const res = await api.getSpace(spaceId);
     if (!res.ok) {
@@ -63,19 +89,18 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
       return;
     }
     current = res.data;
-    if (view === "detail") renderDetail();
+    if (view === "space") renderSpace();
   }
 
   /** Realtime: a Space changed — refresh whatever is on screen. */
   async function onSpaceUpdated(spaceId) {
     if (!root || root.hidden) return;
-    if (view === "detail" && current?.id === spaceId) {
+    if (view === "space" && current?.id === spaceId) {
       const res = await api.getSpace(spaceId);
       if (res.ok) {
         current = res.data;
-        renderDetail();
+        renderSpace();
       } else {
-        // We were removed / it was deleted.
         current = null;
         view = "list";
         await loadList();
@@ -85,32 +110,36 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     }
   }
 
-  /* -- Rendering ----------------------------------------------------------- */
+  /* -- Shell --------------------------------------------------------------- */
 
-  function shell(title, ...body) {
+  function shell(opts, ...body) {
     clear(root);
-    const card = el(
-      "div",
-      { class: "spaces-card" },
-      el(
-        "header",
-        { class: "spaces-card__head" },
-        el("h2", { class: "spaces-card__title", text: title }),
+    const head = el("header", { class: "spaces-card__head" });
+    if (opts.onBack) {
+      head.append(
         el(
           "button",
-          { class: "icon-btn", type: "button", title: "Close", "aria-label": "Close", onClick: close },
-          closeIcon()
+          { class: "icon-btn spaces-card__back", type: "button", "aria-label": "Back", title: "Back", onClick: opts.onBack },
+          backIcon()
         )
-      ),
-      ...body
+      );
+    }
+    head.append(el("h2", { class: "spaces-card__title", text: opts.title }));
+    if (opts.action) head.append(opts.action);
+    head.append(
+      el("button", { class: "icon-btn", type: "button", "aria-label": "Close", title: "Close", onClick: close }, closeIcon())
     );
+
+    const card = el("div", { class: "spaces-card" + (opts.wide ? " spaces-card--wide" : "") }, head, ...body);
     root.append(card);
     return card;
   }
 
   function renderLoading(msg) {
-    shell("🌐 Spaces", el("div", { class: "spaces-loading" }, el("span", { class: "spinner" }), msg));
+    shell({ title: "🌐 Spaces" }, el("div", { class: "spaces-loading" }, el("span", { class: "spinner" }), msg));
   }
+
+  /* -- Space list ---------------------------------------------------------- */
 
   function renderList() {
     const body = el("div", { class: "spaces-list" });
@@ -121,8 +150,8 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
           "div",
           { class: "spaces-empty" },
           el("div", { class: "spaces-empty__glyph", text: "🌐" }),
-          el("p", { text: "You’re not in any Spaces yet." }),
-          el("p", { class: "spaces-empty__sub", text: "Create a community, or join one with its ID." })
+          el("h3", { text: "Your Spaces live here" }),
+          el("p", { class: "spaces-empty__sub", text: "Create a community with channels, roles and a home — or join one with its @handle." })
         )
       );
     } else {
@@ -130,15 +159,18 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
         body.append(
           el(
             "button",
-            { class: "space-row", type: "button", onClick: () => openDetail(s.id) },
-            spaceAvatar(s),
+            { class: "space-card", type: "button", onClick: () => openSpace(s.id) },
+            spaceAvatar(s, "md"),
             el(
               "span",
-              { class: "space-row__meta" },
-              el("span", { class: "space-row__name", text: s.name }),
+              { class: "space-card__meta" },
+              el("span", { class: "space-card__name", text: s.name }),
+              el("span", { class: "space-card__handle", text: s.handle ? "@" + s.handle : "" }),
               el(
                 "span",
-                { class: "space-row__sub", text: `${s.memberCount} member${s.memberCount === 1 ? "" : "s"}` }
+                { class: "space-card__stats" },
+                el("span", { text: `${fmt(s.memberCount)} member${s.memberCount === 1 ? "" : "s"}` }),
+                s.onlineCount ? el("span", { class: "space-card__online", text: `${fmt(s.onlineCount)} online` }) : null
               )
             ),
             roleBadge(s.myRole)
@@ -150,189 +182,197 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     const actions = el(
       "div",
       { class: "spaces-actions" },
-      el(
-        "button",
-        { class: "btn btn--primary", type: "button", onClick: showCreateForm },
-        "＋ New Space"
-      ),
-      el("button", { class: "btn btn--ghost", type: "button", onClick: showJoinForm }, "Join by ID")
+      el("button", { class: "btn btn--primary", type: "button", onClick: showCreateForm }, "＋ New Space"),
+      el("button", { class: "btn btn--ghost", type: "button", onClick: showJoinForm }, "Join by handle")
     );
 
-    shell("🌐 Spaces", body, actions);
+    shell({ title: "🌐 Spaces" }, body, actions);
   }
 
-  function showCreateForm() {
-    const nameInput = el("input", {
-      class: "field__input",
-      type: "text",
-      maxlength: "80",
-      placeholder: "Space name",
-    });
-    const descInput = el("input", {
-      class: "field__input",
-      type: "text",
-      maxlength: "280",
-      placeholder: "What’s it about? (optional)",
-    });
-    const errBox = el("div", { class: "composer-error", hidden: true });
+  /* -- Space workspace (nav + main) ---------------------------------------- */
 
-    const submit = async () => {
-      const name = nameInput.value.trim();
-      if (!name) return showErr(errBox, "Give your Space a name.");
-      if (busy) return;
-      busy = true;
-      const res = await api.createSpace({ name, description: descInput.value.trim() || undefined });
-      busy = false;
-      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t create the Space.");
-      await loadList();
-      openDetail(res.data.id);
-    };
-    nameInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") submit();
-    });
-
-    shell(
-      "🌐 New Space",
-      el(
-        "div",
-        { class: "spaces-form" },
-        el("label", { class: "field__label", text: "Name" }),
-        nameInput,
-        el("label", { class: "field__label", text: "Description" }),
-        descInput,
-        errBox,
-        el(
-          "div",
-          { class: "spaces-form__actions" },
-          el("button", { class: "btn btn--ghost", type: "button", onClick: () => renderBack() }, "Cancel"),
-          el("button", { class: "btn btn--primary", type: "button", onClick: submit }, "Create Space")
-        )
-      )
-    );
-    nameInput.focus();
-  }
-
-  function showJoinForm() {
-    const idInput = el("input", {
-      class: "field__input",
-      type: "text",
-      placeholder: "Space ID (UUID)",
-      autocomplete: "off",
-      spellcheck: "false",
-    });
-    const errBox = el("div", { class: "composer-error", hidden: true });
-
-    const submit = async () => {
-      const id = idInput.value.trim();
-      if (!/^[0-9a-f-]{36}$/i.test(id)) return showErr(errBox, "That doesn’t look like a Space ID.");
-      if (busy) return;
-      busy = true;
-      const res = await api.joinSpace(id);
-      busy = false;
-      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t join that Space.");
-      await loadList();
-      openDetail(id);
-    };
-    idInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") submit();
-    });
-
-    shell(
-      "🌐 Join a Space",
-      el(
-        "div",
-        { class: "spaces-form" },
-        el("label", { class: "field__label", text: "Paste a Space ID to join" }),
-        idInput,
-        errBox,
-        el(
-          "div",
-          { class: "spaces-form__actions" },
-          el("button", { class: "btn btn--ghost", type: "button", onClick: () => renderBack() }, "Cancel"),
-          el("button", { class: "btn btn--primary", type: "button", onClick: submit }, "Join")
-        )
-      )
-    );
-    idInput.focus();
-  }
-
-  function renderBack() {
-    view = "list";
-    renderList();
-  }
-
-  function renderDetail() {
+  function renderSpace() {
     const s = current;
     const myRank = RANK[s.myRole] ?? 0;
-    const meId = getMe()?.id;
 
-    /* Header row with a back arrow + share-ID button. */
-    const head = el(
-      "div",
-      { class: "space-detail__banner" },
-      spaceAvatar(s, "lg"),
+    /* Left rail. */
+    const nav = el("div", { class: "space-nav" });
+    nav.append(
       el(
         "div",
-        { class: "space-detail__id" },
-        el("div", { class: "space-detail__name", text: s.name }),
-        el("div", {
-          class: "space-detail__sub",
-          text: `${s.memberCount} member${s.memberCount === 1 ? "" : "s"} · you’re ${ROLE_LABEL[s.myRole]}`,
-        }),
-        s.description ? el("div", { class: "space-detail__desc", text: s.description }) : null
+        { class: "space-nav__id" },
+        spaceAvatar(s, "sm"),
+        el(
+          "div",
+          { class: "space-nav__idmeta" },
+          el("div", { class: "space-nav__name", text: s.name }),
+          el("div", { class: "space-nav__handle", text: s.handle ? "@" + s.handle : "" })
+        ),
+        myRank >= RANK.admin
+          ? el(
+              "button",
+              { class: "icon-btn space-nav__gear", type: "button", title: "Space settings", "aria-label": "Space settings", onClick: showEditForm },
+              gearIcon()
+            )
+          : null
       )
     );
 
-    /* Channels. */
-    const chanList = el("div", { class: "space-channels" });
+    // Home + Members are virtual nav items; channels are grouped by section.
+    nav.append(navItem("🏠", "Home", mainView === "home", () => selectMain("home")));
+
+    const bySection = new Map();
     for (const c of s.channels) {
-      const isVoice = c.kind === "voice";
-      const row = el(
-        "button",
-        {
-          class: "channel-row",
-          type: "button",
-          onClick: () =>
-            isVoice ? startChannelCall(c.chatId, s.id, "audio") : openChannel(c.chatId, s.id),
-        },
-        el("span", { class: "channel-row__icon", text: c.icon || (isVoice ? "🔊" : "#") }),
-        el("span", { class: "channel-row__name", text: c.name }),
-        c.kind === "announcement" ? el("span", { class: "channel-row__tag", text: "announce" }) : null,
-        isVoice ? el("span", { class: "channel-row__tag channel-row__tag--voice", text: "voice" }) : null
-      );
-      if (myRank >= RANK.admin && s.channels.length > 1) {
-        row.append(
-          el(
-            "span",
-            {
-              class: "channel-row__del",
-              title: "Delete channel",
-              onClick: async (e) => {
-                e.stopPropagation();
-                if (!confirm(`Delete #${c.name}? Its messages are removed.`)) return;
-                const res = await api.deleteSpaceChannel(c.id);
-                if (res.ok) openDetail(s.id);
-              },
-            },
-            "✕"
+      const arr = bySection.get(c.category) || [];
+      arr.push(c);
+      bySection.set(c.category, arr);
+    }
+    const sections = [...bySection.keys()].sort(
+      (a, b) => sectionRank(a) - sectionRank(b) || a.localeCompare(b)
+    );
+    for (const section of sections) {
+      nav.append(el("div", { class: "space-nav__section", text: section }));
+      for (const c of bySection.get(section)) {
+        nav.append(
+          navItem(
+            c.icon || KIND_ICON[c.kind] || "#",
+            c.name,
+            false,
+            () => (isCall(c.kind) ? startChannelCall(c.chatId, s.id, c.kind === "video" ? "video" : "audio") : openChannel(c.chatId, s.id)),
+            myRank >= RANK.admin && s.channels.length > 1
+              ? () => deleteChannel(c)
+              : null
           )
         );
       }
-      chanList.append(row);
     }
     if (myRank >= RANK.admin) {
-      chanList.append(
+      nav.append(navItem("＋", "Add channel", false, () => showChannelForm(), null, "space-nav__item--add"));
+    }
+
+    nav.append(el("div", { class: "space-nav__section", text: "Community" }));
+    nav.append(navItem("👥", `Members · ${fmt(s.memberCount)}`, mainView === "members", () => selectMain("members")));
+
+    /* Main pane. */
+    const main = el("div", { class: "space-main", "data-role": "space-main" });
+
+    const card = shell({ title: "", wide: true, onBack: () => backToList() }, el("div", { class: "space-workspace" }, nav, main));
+    // Replace the empty title with the Space name for context.
+    card.querySelector(".spaces-card__title").textContent = "🌐 " + s.name;
+
+    fillMain(main);
+  }
+
+  function selectMain(v) {
+    mainView = v;
+    renderSpace(); // rebuilds nav (active states) + main from mainView
+  }
+
+  function fillMain(main) {
+    clear(main);
+    if (mainView === "members") main.append(renderMembers());
+    else main.append(renderHome());
+  }
+
+  /* -- Home ---------------------------------------------------------------- */
+
+  function renderHome() {
+    const s = current;
+    const home = el("div", { class: "space-home" });
+
+    // Banner + identity.
+    const banner = el("div", { class: "space-home__banner" });
+    if (s.bannerUrl) banner.setAttribute("style", `background-image:url("${cssUrl(s.bannerUrl)}")`);
+    home.append(
+      el(
+        "div",
+        { class: "space-home__hero" },
+        banner,
+        el(
+          "div",
+          { class: "space-home__herometa" },
+          spaceAvatar(s, "lg"),
+          el("h1", { class: "space-home__name", text: s.name }),
+          el("div", { class: "space-home__handle", text: s.handle ? "@" + s.handle : "" })
+        )
+      )
+    );
+
+    home.append(el("p", { class: "space-home__welcome", text: s.description || "Welcome to the Space." }));
+
+    // Stat chips.
+    home.append(
+      el(
+        "div",
+        { class: "space-home__stats" },
+        statChip(fmt(s.memberCount), s.memberCount === 1 ? "member" : "members"),
+        statChip(fmt(s.onlineCount), "online", true),
+        statChip(String(s.channels.length), "channels")
+      )
+    );
+
+    // Latest announcement card.
+    if (s.latestAnnouncement) {
+      const a = s.latestAnnouncement;
+      home.append(
         el(
           "button",
-          { class: "channel-row channel-row--add", type: "button", onClick: () => showChannelForm(s) },
-          el("span", { class: "channel-row__icon", text: "＋" }),
-          el("span", { class: "channel-row__name", text: "Add channel" })
+          {
+            class: "space-home__card space-home__announce",
+            type: "button",
+            onClick: () => openChannel(a.chatId, s.id),
+          },
+          el("div", { class: "space-home__card-icon", text: "📢" }),
+          el(
+            "div",
+            { class: "space-home__card-body" },
+            el("div", { class: "space-home__card-title", text: "Latest announcement" }),
+            el("div", { class: "space-home__card-text", text: preview(a.content) || "New announcement" }),
+            el("div", { class: "space-home__card-sub", text: `${a.senderName} · ${timeAgo(a.createdAt)}` })
+          )
         )
       );
     }
 
-    /* Members. */
-    const memList = el("div", { class: "space-members" });
+    // Quick tiles for the notable channels.
+    const tiles = el("div", { class: "space-home__tiles" });
+    const forum = s.channels.find((c) => c.kind === "forum");
+    const polls = s.channels.find((c) => c.kind === "poll");
+    const voice = s.channels.find((c) => isCall(c.kind));
+    if (forum) tiles.append(homeTile("🧵", forum.name, "Discussions & posts", () => openChannel(forum.chatId, s.id)));
+    if (polls) tiles.append(homeTile("📊", polls.name, "Vote & see results", () => openChannel(polls.chatId, s.id)));
+    if (voice)
+      tiles.append(
+        homeTile("🔊", voice.name, "Jump into voice", () =>
+          startChannelCall(voice.chatId, s.id, voice.kind === "video" ? "video" : "audio")
+        )
+      );
+    if (tiles.childElementCount) home.append(tiles);
+
+    // Primary way in.
+    const entry = s.channels.find((c) => c.kind === "forum") || s.channels.find((c) => c.kind === "text");
+    if (entry) {
+      home.append(
+        el(
+          "button",
+          { class: "btn btn--primary space-home__cta", type: "button", onClick: () => openChannel(entry.chatId, s.id) },
+          "Join the discussion"
+        )
+      );
+    }
+
+    return home;
+  }
+
+  /* -- Members ------------------------------------------------------------- */
+
+  function renderMembers() {
+    const s = current;
+    const meId = getMe()?.id;
+    const myRank = RANK[s.myRole] ?? 0;
+    const wrap = el("div", { class: "space-members" });
+    wrap.append(el("h3", { class: "space-main__title", text: `Members · ${fmt(s.memberCount)}` }));
+
     for (const m of s.members) {
       const canManage = m.user.id !== meId && myRank > (RANK[m.role] ?? 0) && myRank >= RANK.admin;
       const row = el(
@@ -347,11 +387,11 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
         ),
         roleBadge(m.role)
       );
-      if (canManage) row.append(memberMenu(s, m));
-      memList.append(row);
+      if (canManage) row.append(memberMenu(m));
+      wrap.append(row);
     }
 
-    /* Footer actions. */
+    // Leave / delete lives with the members view.
     const footer = el("div", { class: "space-detail__actions" });
     if (s.myRole === "owner") {
       footer.append(
@@ -363,7 +403,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
             onClick: async () => {
               if (!confirm(`Delete “${s.name}” for everyone? This can’t be undone.`)) return;
               const res = await api.deleteSpace(s.id);
-              if (res.ok) renderBack();
+              if (res.ok) backToList();
             },
           },
           "Delete Space"
@@ -379,150 +419,26 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
             onClick: async () => {
               if (!confirm(`Leave “${s.name}”?`)) return;
               const res = await api.leaveSpace(s.id);
-              if (res.ok) renderBack();
+              if (res.ok) backToList();
             },
           },
           "Leave Space"
         )
       );
     }
-
-    const card = shell(
-      "🌐 " + s.name,
-      el(
-        "div",
-        { class: "space-detail" },
-        head,
-        el(
-          "div",
-          { class: "space-detail__idline" },
-          el("span", { class: "space-detail__idlabel", text: "Invite ID" }),
-          el("code", { class: "space-detail__idcode", text: s.id }),
-          el(
-            "button",
-            {
-              class: "settings__btn-sm",
-              type: "button",
-              onClick: (e) => {
-                navigator.clipboard?.writeText(s.id);
-                e.currentTarget.textContent = "Copied";
-                setTimeout(() => (e.currentTarget.textContent = "Copy"), 1200);
-              },
-            },
-            "Copy"
-          )
-        ),
-        el("h3", { class: "space-detail__section", text: "Channels" }),
-        chanList,
-        el("h3", { class: "space-detail__section", text: `Members · ${s.members.length}` }),
-        memList,
-        footer
-      )
-    );
-
-    // A back button in the header returns to the Space list.
-    card
-      .querySelector(".spaces-card__head")
-      .prepend(
-        el(
-          "button",
-          { class: "icon-btn spaces-card__back", type: "button", title: "Back", "aria-label": "Back", onClick: renderBack },
-          backIcon()
-        )
-      );
+    wrap.append(footer);
+    return wrap;
   }
 
-  function showChannelForm(s) {
-    const nameInput = el("input", {
-      class: "field__input",
-      type: "text",
-      maxlength: "60",
-      placeholder: "channel-name",
-    });
-    const iconInput = el("input", {
-      class: "field__input",
-      type: "text",
-      maxlength: "4",
-      placeholder: "Emoji (optional)",
-    });
-    const kindSeg = el(
-      "div",
-      { class: "segmented" },
-      kindBtn("text", "💬 Text", true),
-      kindBtn("announcement", "📢 Announce"),
-      kindBtn("voice", "🔊 Voice")
-    );
-    let kind = "text";
-    function kindBtn(val, label, active = false) {
-      const b = el(
-        "button",
-        {
-          type: "button",
-          class: "segmented__btn" + (active ? " is-active" : ""),
-          onClick: () => {
-            kind = val;
-            kindSeg.querySelectorAll(".segmented__btn").forEach((x) => x.classList.remove("is-active"));
-            b.classList.add("is-active");
-          },
-        },
-        label
-      );
-      return b;
-    }
-    const errBox = el("div", { class: "composer-error", hidden: true });
-
-    const submit = async () => {
-      const name = nameInput.value.trim();
-      if (!name) return showErr(errBox, "Name the channel.");
-      if (busy) return;
-      busy = true;
-      const res = await api.createSpaceChannel(s.id, { name, icon: iconInput.value.trim() || undefined, kind });
-      busy = false;
-      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t create the channel.");
-      openDetail(s.id);
-    };
-
-    const card = shell(
-      "🌐 New channel",
-      el(
-        "div",
-        { class: "spaces-form" },
-        el("label", { class: "field__label", text: "Channel name" }),
-        nameInput,
-        el("label", { class: "field__label", text: "Icon" }),
-        iconInput,
-        el("label", { class: "field__label", text: "Type" }),
-        kindSeg,
-        errBox,
-        el(
-          "div",
-          { class: "spaces-form__actions" },
-          el("button", { class: "btn btn--ghost", type: "button", onClick: () => openDetail(s.id) }, "Cancel"),
-          el("button", { class: "btn btn--primary", type: "button", onClick: submit }, "Create channel")
-        )
-      )
-    );
-    card
-      .querySelector(".spaces-card__head")
-      .prepend(
-        el(
-          "button",
-          { class: "icon-btn spaces-card__back", type: "button", title: "Back", "aria-label": "Back", onClick: () => openDetail(s.id) },
-          backIcon()
-        )
-      );
-    nameInput.focus();
-  }
-
-  /** A tiny role/kick menu for a member the caller can manage. */
-  function memberMenu(s, m) {
+  function memberMenu(m) {
+    const s = current;
     const wrap = el("div", { class: "member-row__manage" });
     const canMakeAdmin = s.myRole === "owner" && m.role !== "admin";
     const opts = [];
-    if (m.role !== "moderator") opts.push(["moderator", "Make moderator"]);
-    if (m.role !== "member") opts.push(["member", "Make member"]);
-    if (canMakeAdmin) opts.unshift(["admin", "Make admin"]);
-
+    if (canMakeAdmin) opts.push(["admin", "Admin"]);
+    if (m.role !== "moderator") opts.push(["moderator", "Moderator"]);
+    if (m.role !== "contributor") opts.push(["contributor", "Contributor"]);
+    if (m.role !== "member") opts.push(["member", "Member"]);
     for (const [role, label] of opts) {
       wrap.append(
         el(
@@ -530,10 +446,9 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
           {
             class: "member-row__act",
             type: "button",
-            title: label,
             onClick: async () => {
               const res = await api.setSpaceMemberRole(s.id, m.user.id, role);
-              if (res.ok) openDetail(s.id);
+              if (res.ok) openSpace(s.id);
             },
           },
           label
@@ -546,11 +461,10 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
         {
           class: "member-row__act member-row__act--danger",
           type: "button",
-          title: "Remove",
           onClick: async () => {
             if (!confirm(`Remove ${m.user.displayName} from the Space?`)) return;
             const res = await api.kickSpaceMember(s.id, m.user.id);
-            if (res.ok) openDetail(s.id);
+            if (res.ok) openSpace(s.id);
           },
         },
         "Remove"
@@ -559,13 +473,263 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     return wrap;
   }
 
+  async function deleteChannel(c) {
+    if (!confirm(`Delete #${c.name}? Its messages are removed.`)) return;
+    const res = await api.deleteSpaceChannel(c.id);
+    if (res.ok) openSpace(current.id);
+  }
+
+  /* -- Forms --------------------------------------------------------------- */
+
+  function showCreateForm() {
+    const name = textField("Space name", "80");
+    const desc = textField("Description (optional)", "280");
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    let visibility = "private";
+    const vis = segmented(
+      [
+        ["private", "🔒 Private"],
+        ["public", "🌍 Public"],
+      ],
+      visibility,
+      (v) => (visibility = v)
+    );
+    const submit = async () => {
+      if (!name.input.value.trim()) return showErr(errBox, "Give your Space a name.");
+      if (busy) return;
+      busy = true;
+      const res = await api.createSpace({
+        name: name.input.value.trim(),
+        description: desc.input.value.trim() || undefined,
+        visibility,
+      });
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t create the Space.");
+      await loadList();
+      openSpace(res.data.id);
+    };
+    formShell("🌐 New Space", () => renderList(), [
+      name.wrap,
+      desc.wrap,
+      el("label", { class: "field__label", text: "Visibility" }),
+      vis,
+      errBox,
+      formActions(() => renderList(), "Create Space", submit),
+    ]);
+    name.input.focus();
+  }
+
+  function showJoinForm() {
+    const idf = textField("Space @handle or ID", "60");
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const submit = async () => {
+      const raw = idf.input.value.trim().replace(/^@/, "");
+      if (!raw) return showErr(errBox, "Enter a Space handle or ID.");
+      if (busy) return;
+      busy = true;
+      const res = await api.joinSpace(raw);
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t join that Space.");
+      await loadList();
+      openSpace(res.data.id);
+    };
+    formShell("🌐 Join a Space", () => renderList(), [
+      el("p", { class: "spaces-form__hint", text: "Ask an admin for the Space’s @handle or ID, then paste it here." }),
+      idf.wrap,
+      errBox,
+      formActions(() => renderList(), "Join", submit),
+    ]);
+    idf.input.focus();
+  }
+
+  function showChannelForm() {
+    const s = current;
+    const name = textField("Channel name", "60");
+    const icon = textField("Icon (optional)", "4");
+    const cat = textField("Section (e.g. Channels)", "40");
+    cat.input.value = "Channels";
+    let kind = "text";
+    const kindSeg = segmented(
+      Object.entries(KIND_LABEL),
+      kind,
+      (v) => (kind = v),
+      "segmented--wrap"
+    );
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const submit = async () => {
+      if (!name.input.value.trim()) return showErr(errBox, "Name the channel.");
+      if (busy) return;
+      busy = true;
+      const res = await api.createSpaceChannel(s.id, {
+        name: name.input.value.trim(),
+        icon: icon.input.value.trim() || undefined,
+        kind,
+        category: cat.input.value.trim() || undefined,
+      });
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t create the channel.");
+      openSpace(s.id);
+    };
+    formShell("🌐 New channel", () => openSpace(s.id), [
+      name.wrap,
+      el("label", { class: "field__label", text: "Type" }),
+      kindSeg,
+      icon.wrap,
+      cat.wrap,
+      errBox,
+      formActions(() => openSpace(s.id), "Create channel", submit),
+    ]);
+    name.input.focus();
+  }
+
+  function showEditForm() {
+    const s = current;
+    const name = textField("Name", "80");
+    name.input.value = s.name;
+    const handle = textField("Handle", "24");
+    handle.input.value = s.handle || "";
+    const desc = textField("Description", "280");
+    desc.input.value = s.description || "";
+    const avatar = textField("Avatar URL", "2048");
+    avatar.input.value = s.avatarUrl || "";
+    const banner = textField("Banner URL", "2048");
+    banner.input.value = s.bannerUrl || "";
+    let visibility = s.visibility;
+    const vis = segmented(
+      [
+        ["private", "🔒 Private"],
+        ["public", "🌍 Public"],
+      ],
+      visibility,
+      (v) => (visibility = v)
+    );
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const submit = async () => {
+      if (busy) return;
+      const patch = {
+        name: name.input.value.trim() || undefined,
+        handle: handle.input.value.trim() || undefined,
+        description: desc.input.value.trim() || null,
+        avatarUrl: avatar.input.value.trim() || null,
+        bannerUrl: banner.input.value.trim() || null,
+        visibility,
+      };
+      busy = true;
+      const res = await api.updateSpace(s.id, patch);
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t save changes.");
+      current = res.data;
+      renderSpace();
+    };
+    formShell("🌐 Space settings", () => renderSpace(), [
+      name.wrap,
+      handle.wrap,
+      desc.wrap,
+      el("label", { class: "field__label", text: "Visibility" }),
+      vis,
+      avatar.wrap,
+      banner.wrap,
+      errBox,
+      formActions(() => renderSpace(), "Save changes", submit),
+    ]);
+    name.input.focus();
+  }
+
   /* -- Small pieces -------------------------------------------------------- */
 
+  function navItem(icon, label, active, onClick, onDelete = null, extraClass = "") {
+    const item = el(
+      "button",
+      { class: "space-nav__item" + (active ? " is-active" : "") + (extraClass ? " " + extraClass : ""), type: "button", onClick },
+      el("span", { class: "space-nav__icon", text: icon }),
+      el("span", { class: "space-nav__label", text: label })
+    );
+    if (onDelete) {
+      item.append(
+        el(
+          "span",
+          {
+            class: "space-nav__del",
+            title: "Delete channel",
+            onClick: (e) => {
+              e.stopPropagation();
+              onDelete();
+            },
+          },
+          "✕"
+        )
+      );
+    }
+    return item;
+  }
+
+  function statChip(value, label, online = false) {
+    return el(
+      "div",
+      { class: "space-stat" + (online ? " space-stat--online" : "") },
+      el("span", { class: "space-stat__value", text: value }),
+      el("span", { class: "space-stat__label", text: label })
+    );
+  }
+
+  function homeTile(icon, title, sub, onClick) {
+    return el(
+      "button",
+      { class: "space-home__tile", type: "button", onClick },
+      el("span", { class: "space-home__tile-icon", text: icon }),
+      el("span", { class: "space-home__tile-title", text: title }),
+      el("span", { class: "space-home__tile-sub", text: sub })
+    );
+  }
+
+  function textField(label, maxlength) {
+    const input = el("input", { class: "field__input", type: "text", maxlength, autocomplete: "off", spellcheck: "false" });
+    const wrap = el("label", { class: "field" }, el("span", { class: "field__label", text: label }), input);
+    return { wrap, input };
+  }
+
+  function segmented(entries, initial, onPick, extra = "") {
+    const seg = el("div", { class: "segmented " + extra });
+    for (const [val, label] of entries) {
+      const b = el(
+        "button",
+        {
+          type: "button",
+          class: "segmented__btn" + (val === initial ? " is-active" : ""),
+          onClick: () => {
+            seg.querySelectorAll(".segmented__btn").forEach((x) => x.classList.remove("is-active"));
+            b.classList.add("is-active");
+            onPick(val);
+          },
+        },
+        label
+      );
+      seg.append(b);
+    }
+    return seg;
+  }
+
+  function formActions(onCancel, label, onSubmit) {
+    return el(
+      "div",
+      { class: "spaces-form__actions" },
+      el("button", { class: "btn btn--ghost", type: "button", onClick: onCancel }, "Cancel"),
+      el("button", { class: "btn btn--primary", type: "button", onClick: onSubmit }, label)
+    );
+  }
+
+  function formShell(title, onBack, children) {
+    shell({ title, onBack }, el("div", { class: "spaces-form" }, ...children.filter(Boolean)));
+  }
+
+  function backToList() {
+    view = "list";
+    renderList();
+  }
+
   function spaceAvatar(s, size = "") {
-    const node = el("span", {
-      class: "space-avatar" + (size === "lg" ? " space-avatar--lg" : ""),
-      style: gradientFor(s.name),
-    });
+    const cls = "space-avatar" + (size ? " space-avatar--" + size : "");
+    const node = el("span", { class: cls, style: gradientFor(s.name) });
     if (s.avatarUrl) {
       node.classList.add("space-avatar--img");
       node.setAttribute("style", `background-image:url("${cssUrl(s.avatarUrl)}")`);
@@ -588,7 +752,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
 
   function roleBadge(role) {
     if (!role || role === "member") return null;
-    return el("span", { class: `role-badge role-badge--${role}`, text: ROLE_LABEL[role] });
+    return el("span", { class: `role-badge role-badge--${role}`, text: ROLE_LABEL[role] || role });
   }
 
   function gradientFor(seed) {
@@ -602,12 +766,34 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     box.textContent = msg;
     box.hidden = false;
   }
+  function sectionRank(name) {
+    const i = SECTION_ORDER.indexOf(name);
+    return i === -1 ? SECTION_ORDER.length : i;
+  }
+  function fmt(n) {
+    return Number(n || 0).toLocaleString();
+  }
+  function preview(text) {
+    const t = String(text || "").replace(/\s+/g, " ").trim();
+    return t.length > 100 ? t.slice(0, 97) + "…" : t;
+  }
+  function timeAgo(iso) {
+    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return "just now";
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
+  }
+
   function closeIcon() {
     return svg('<path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>');
   }
   function backIcon() {
+    return svg('<path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+  }
+  function gearIcon() {
     return svg(
-      '<path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+      '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 4.6a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
     );
   }
   function svg(inner) {

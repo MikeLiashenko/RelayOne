@@ -7,6 +7,7 @@ import {
   createSpaceChannelSchema,
   createSpaceSchema,
   updateSpaceMemberSchema,
+  updateSpaceSchema,
 } from "../../validation/schemas";
 import { asyncHandler, sendData } from "../middleware/http";
 
@@ -52,6 +53,17 @@ spacesRouter.get(
     const { user } = getAuth(req);
     const id = parse(idParam, req.params.id);
     sendData(res, await spaceService.getDetail(id, user.id));
+  })
+);
+
+/** Edit a Space's object fields — name, handle, description, avatar, banner (admin+). */
+spacesRouter.patch(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const patch = parse(updateSpaceSchema, req.body);
+    sendData(res, await spaceService.updateSpace(id, user.id, patch));
   })
 );
 

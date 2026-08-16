@@ -134,14 +134,22 @@ export interface PublicReaction {
 
 /* -- Spaces (communities) -------------------------------------------------- */
 
-export type SpaceRole = "owner" | "admin" | "moderator" | "member";
+export type SpaceRole = "owner" | "admin" | "moderator" | "contributor" | "member";
+export type SpaceChannelKind =
+  | "text"
+  | "forum"
+  | "announcement"
+  | "poll"
+  | "voice"
+  | "video";
 
 export interface PublicSpaceChannel {
   id: string;
   chatId: string;
   name: string;
   icon: string | null;
-  kind: "text" | "announcement" | "voice";
+  kind: SpaceChannelKind;
+  category: string;
   position: number;
 }
 
@@ -155,18 +163,33 @@ export interface PublicSpaceMember {
 export interface PublicSpace {
   id: string;
   name: string;
+  handle: string | null;
   description: string | null;
   avatarUrl: string | null;
+  bannerUrl: string | null;
+  visibility: "public" | "private";
   memberCount: number;
+  onlineCount: number;
   /** The requesting user's role, when they're a member. */
   myRole: SpaceRole | null;
   createdAt: string;
 }
 
-/** Full Space view: channels + members + the caller's role. */
+/** A compact preview of the Space's newest announcement (for the Home screen). */
+export interface SpaceAnnouncement {
+  channelId: string;
+  chatId: string;
+  content: string | null;
+  senderId: string;
+  senderName: string;
+  createdAt: string;
+}
+
+/** Full Space view: channels + members + the caller's role + Home data. */
 export interface SpaceDetail extends PublicSpace {
   channels: PublicSpaceChannel[];
   members: PublicSpaceMember[];
+  latestAnnouncement: SpaceAnnouncement | null;
 }
 
 export interface PublicNotification {

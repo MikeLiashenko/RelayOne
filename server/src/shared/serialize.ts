@@ -188,21 +188,26 @@ export function toPublicSpaceChannel(c: SpaceChannel): PublicSpaceChannel {
     chatId: c.chatId,
     name: c.name,
     icon: c.icon,
-    kind: c.kind,
+    kind: c.kind as PublicSpaceChannel["kind"],
+    category: c.category,
     position: c.position,
   };
 }
 
 export function toPublicSpace(
   space: Space,
-  opts: { memberCount: number; myRole: SpaceRole | null }
+  opts: { memberCount: number; onlineCount: number; myRole: SpaceRole | null }
 ): PublicSpace {
   return {
     id: space.id,
     name: space.name,
+    handle: space.handle,
     description: space.description,
     avatarUrl: space.avatarUrl,
+    bannerUrl: space.bannerUrl,
+    visibility: (space.visibility as PublicSpace["visibility"]) ?? "private",
     memberCount: opts.memberCount,
+    onlineCount: opts.onlineCount,
     myRole: opts.myRole,
     createdAt: space.createdAt.toISOString(),
   };

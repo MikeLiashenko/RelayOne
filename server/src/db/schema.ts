@@ -25,17 +25,20 @@ export const verificationPurposeEnum = pgEnum("verification_purpose", [
 ]);
 export const chatTypeEnum = pgEnum("chat_type", ["direct", "group", "channel", "saved"]);
 export const memberRoleEnum = pgEnum("member_role", ["owner", "admin", "member"]);
-export const spaceRoleEnum = pgEnum("space_role", [
-  "owner",
-  "admin",
-  "moderator",
-  "member",
-]);
-export const spaceChannelKindEnum = pgEnum("space_channel_kind", [
+
+// Space roles + channel kinds are stored as plain text (not pg enums) so the set
+// can grow — custom roles and new channel types — without an enum migration.
+// The built-in role ladder (highest → lowest); custom named roles rank alongside
+// "contributor" but carry their own permission grants.
+export const SPACE_ROLES = ["owner", "admin", "moderator", "contributor", "member"] as const;
+export const SPACE_CHANNEL_KINDS = [
   "text",
+  "forum",
   "announcement",
+  "poll",
   "voice",
-]);
+  "video",
+] as const;
 export const attachmentKindEnum = pgEnum("attachment_kind", [
   "image",
   "video",
@@ -485,8 +488,13 @@ export const spaces = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
+    // Unique public handle (e.g. "storm-community") for pretty links/mentions.
+    handle: text("handle"),
     description: text("description"),
     avatarUrl: text("avatar_url"),
+    bannerUrl: text("banner_url"),
+    // "public" = joinable by anyone with the handle/ID; "private" = invite only.
+    visibility: text("visibility").notNull().default("private"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -495,6 +503,9 @@ export const spaces = pgTable(
   },
   (t) => ({
     byCreator: index("spaces_created_by_idx").on(t.createdBy),
+    handleUnique: uniqueIndex("spaces_handle_lower_unique")
+      .on(sql`lower(${t.handle})`)
+      .where(sql`${t.handle} is not null`),
   })
 );
 
@@ -508,7 +519,8 @@ export const spaceMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: spaceRoleEnum("role").notNull().default("member"),
+    // Built-in ladder value; custom-role assignment lives in `space_member_roles`.
+    role: text("role").notNull().default("member"),
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -535,7 +547,9 @@ export const spaceChannels = pgTable(
       .references(() => chats.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     icon: text("icon"),
-    kind: spaceChannelKindEnum("kind").notNull().default("text"),
+    kind: text("kind").notNull().default("text"),
+    // Sidebar section this channel is grouped under (e.g. "Overview"/"Channels"/"Voice").
+    category: text("category").notNull().default("Channels"),
     position: integer("position").notNull().default(0),
     createdAt,
   },
@@ -598,4 +612,5 @@ export type ScheduledMessage = typeof scheduledMessages.$inferSelect;
 export type Space = typeof spaces.$inferSelect;
 export type SpaceMember = typeof spaceMembers.$inferSelect;
 export type SpaceChannel = typeof spaceChannels.$inferSelect;
-export type SpaceRole = (typeof spaceRoleEnum.enumValues)[number];
+export type SpaceRole = (typeof SPACE_ROLES)[number];
+export type SpaceChannelKind = (typeof SPACE_CHANNEL_KINDS)[number];
