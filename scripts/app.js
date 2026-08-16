@@ -15,6 +15,7 @@ import { renderMarkdown } from "./app/markdown.js";
 import { locks } from "./app/locks.js";
 import { ACCENTS, getAccent, getThemePref, initTheme, setAccent, setTheme } from "./app/features/theme.js";
 import { createFolders } from "./app/features/folders.js";
+import { createSpaces } from "./app/features/spaces.js";
 import { ROADMAP } from "./app/features/roadmap.js";
 import {
   $,
@@ -50,6 +51,8 @@ const state = {
   pinIdx: 0, // which pin the bar currently points at
   viewedProfile: null,
   pendingAttachments: [], // uploaded, not-yet-sent attachments for the composer
+  activeSpaceId: null, // set when the open chat is a Space channel (for "back")
+  pendingSpaceId: null, // handed from openChannel → openChat
 };
 
 const ATTACH_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -59,6 +62,7 @@ const linkCache = new Map(); // url -> preview | null
 let rt = null;
 let calls = null;
 let folders = null;
+let spacesUI = null;
 const viewer = createViewer();
 let typingSentAt = 0;
 
@@ -74,6 +78,12 @@ const DRAFTS_KEY = "relayone.drafts";
   state.me = me;
 
   folders = createFolders({ getChats: () => state.chats, onChange: renderChatList });
+  spacesUI = createSpaces({
+    api,
+    getMe: () => state.me,
+    openChannel: openChannelChat,
+    startChannelCall,
+  });
 
   renderMe();
   wireStaticUI();
@@ -185,8 +195,14 @@ function wireStaticUI() {
     b.addEventListener("click", () => {
       hideLockScreen();
       $(".messenger").dataset.view = "list";
+      // If this was a Space channel, return to the Space rather than the chat list.
+      const sid = state.activeSpaceId;
+      state.activeSpaceId = null;
+      if (sid) spacesUI?.reopenSpace(sid);
     })
   );
+
+  $('[data-action="open-spaces"]').addEventListener("click", () => spacesUI?.open());
 
   $('[data-action="call-audio"]').addEventListener("click", () => startCall("audio"));
   $('[data-action="call-video"]').addEventListener("click", () => startCall("video"));
@@ -615,6 +631,9 @@ function openSearchResult(action) {
 
 async function openChat(id, highlightId = null) {
   state.activeId = id;
+  // If we arrived via a Space channel, remember it so "back" returns there.
+  state.activeSpaceId = state.pendingSpaceId || null;
+  state.pendingSpaceId = null;
   state.reply = null;
   state.editing = null;
   state.hasMoreOlder = true;
@@ -2229,6 +2248,21 @@ function startGroupCall(media) {
   calls.startGroup({ chatId: chat.id, title: chatDisplay(chat).name, media });
 }
 
+/* -- Spaces (communities) -------------------------------------------------- */
+
+/** Open a Space channel's backing chat in the main view (and remember the Space). */
+function openChannelChat(chatId, spaceId) {
+  spacesUI?.close();
+  state.pendingSpaceId = spaceId;
+  return openChat(chatId);
+}
+
+/** Open a voice channel and immediately start its group call. */
+async function startChannelCall(chatId, spaceId, media) {
+  await openChannelChat(chatId, spaceId);
+  startGroupCall(media);
+}
+
 /* -- Features: banner, settings, what's new, presence ---------------------- */
 
 const BANNER_KEY = "relayone.banner.v2.dismissed";
@@ -2864,6 +2898,8 @@ function handleRealtime(ev) {
       return onRead(ev);
     case "notification":
       return; // list refresh is driven by message.new
+    case "space.updated":
+      return spacesUI?.onSpaceUpdated(ev.spaceId);
     default:
       return;
   }

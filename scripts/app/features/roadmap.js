@@ -6,6 +6,7 @@
  */
 export const ROADMAP = [
   // ── Latest batch (newest first) ──────────────────────────────────────────
+  { icon: "🌐", title: "Spaces", status: "live", isNew: true, desc: "Communities with channels and roles (Owner → Admin → Moderator → Member)." },
   { icon: "🔒", title: "Chat lock", status: "live", isNew: true, desc: "Lock a private chat behind a PIN on this device." },
   { icon: "⏰", title: "Scheduled messages", status: "live", isNew: true, desc: "Write now, pick a date & time — RelayOne sends it automatically." },
   { icon: "🕐", title: "Self-destruct", status: "live", isNew: true, desc: "Set a timer (10s–1 week); the message deletes itself." },

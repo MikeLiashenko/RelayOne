@@ -11,7 +11,7 @@
  * untouched — they always go straight to the network. Non-GET requests
  * (messages, uploads) are never cached.
  */
-const CACHE = "relayone-v3";
+const CACHE = "relayone-v4";
 const SHELL = [
   "./",
   "index.html",

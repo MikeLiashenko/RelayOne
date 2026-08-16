@@ -52,6 +52,22 @@ export const api = {
   createDirect: (otherUserId) =>
     apiFetch("/chats", { method: "POST", body: { type: "direct", memberIds: [otherUserId] } }),
 
+  // Spaces (communities): spaces, channels, members & roles.
+  listSpaces: () => apiFetch("/spaces"),
+  getSpace: (id) => apiFetch(`/spaces/${id}`),
+  createSpace: (body) => apiFetch("/spaces", { method: "POST", body }),
+  deleteSpace: (id) => apiFetch(`/spaces/${id}`, { method: "DELETE" }),
+  joinSpace: (id) => apiFetch(`/spaces/${id}/join`, { method: "POST" }),
+  leaveSpace: (id) => apiFetch(`/spaces/${id}/leave`, { method: "POST" }),
+  createSpaceChannel: (id, body) =>
+    apiFetch(`/spaces/${id}/channels`, { method: "POST", body }),
+  deleteSpaceChannel: (channelId) =>
+    apiFetch(`/spaces/channels/${channelId}`, { method: "DELETE" }),
+  setSpaceMemberRole: (id, userId, role) =>
+    apiFetch(`/spaces/${id}/members/${userId}`, { method: "PATCH", body: { role } }),
+  kickSpaceMember: (id, userId) =>
+    apiFetch(`/spaces/${id}/members/${userId}`, { method: "DELETE" }),
+
   getUser: (id) => apiFetch(`/users/${id}`),
   updateProfile: (patch) => apiFetch("/users/me", { method: "PATCH", body: patch }),
 
