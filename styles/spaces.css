@@ -5,38 +5,40 @@
    airy spacing, large headings, soft panels, minimal dividers.
    ========================================================================== */
 
+/* Full-screen app surface — a Space fills the whole window, not a floating card. */
 .spaces-overlay {
   position: fixed; inset: 0; z-index: 340;
-  display: grid; place-items: start center;
-  padding: 6vh var(--space-5) var(--space-5);
-  background: rgba(4, 6, 15, 0.72);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  background: var(--surface-app, var(--surface-card));
   animation: modal-fade var(--dur-fast) var(--ease-soft) both;
 }
 .spaces-overlay[hidden] { display: none; }
 
 .spaces-card {
-  width: 100%; max-width: 480px;
-  display: flex; flex-direction: column; gap: var(--space-4);
-  max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
-  padding: var(--space-6);
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
   background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 24px;
-  box-shadow: 0 40px 100px -50px rgba(0,0,0,0.9);
-  animation: modal-rise var(--dur-med) var(--ease-out) both;
+  animation: modal-fade var(--dur-fast) var(--ease-soft) both;
 }
-.spaces-card--wide { max-width: 940px; }
 
 .spaces-card__head {
-  position: sticky; top: calc(var(--space-6) * -1);
-  margin: calc(var(--space-6) * -1) calc(var(--space-6) * -1) 0;
-  padding: var(--space-6) var(--space-6) var(--space-3);
-  background: var(--surface-card); z-index: 3;
+  flex: 0 0 auto;
   display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card);
 }
-.spaces-card__title { margin: 0; font-size: 1.375rem; font-weight: var(--fw-semibold); flex: 1; letter-spacing: -0.01em; }
+.spaces-card__title { margin: 0; font-size: 1.25rem; font-weight: var(--fw-semibold); flex: 1; letter-spacing: -0.01em; }
 .spaces-card__back { flex: 0 0 auto; }
+
+/* The scrolling region under the header. Reading views stay centered; the
+   Space workspace (--full) fills edge-to-edge. */
+.spaces-card__body {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: var(--space-4);
+  padding: var(--space-6) var(--space-5);
+  width: 100%; max-width: 720px; margin: 0 auto;
+}
+.spaces-card__body--full { max-width: none; padding: 0; gap: 0; }
 
 .spaces-loading {
   display: flex; align-items: center; gap: var(--space-3);
@@ -90,13 +92,15 @@
    Workspace: left nav + main
    ========================================================================== */
 
-.space-workspace { display: flex; gap: var(--space-5); align-items: flex-start; }
+/* Fills the full-screen body: a scrollable nav rail beside a scrollable main. */
+.space-workspace { display: flex; gap: 0; align-items: stretch; height: 100%; min-height: 0; }
 
 .space-nav {
-  flex: 0 0 236px; display: flex; flex-direction: column; gap: 2px;
-  padding: var(--space-3);
-  background: var(--surface-field); border-radius: var(--radius-lg);
-  align-self: stretch;
+  flex: 0 0 260px; display: flex; flex-direction: column; gap: 2px;
+  padding: var(--space-4) var(--space-3);
+  background: var(--surface-field);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto; overscroll-behavior: contain;
 }
 .space-nav__id { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-3); }
 .space-nav__idmeta { flex: 1; min-width: 0; }
@@ -125,7 +129,11 @@
 .space-nav__item:hover .space-nav__del { opacity: 1; }
 .space-nav__del:hover { color: var(--color-danger, #ff5470); }
 
-.space-main { flex: 1; min-width: 0; }
+.space-main { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-6); }
+/* The workspace manages its own two-pane scroll, so the body itself doesn't. */
+.spaces-card__body--full { overflow: hidden; }
+/* Center Home content within the wide main pane so it stays readable. */
+.space-home, .space-members { max-width: 760px; margin: 0 auto; }
 .space-main__title { margin: 0 0 var(--space-3); font-size: 1.125rem; }
 
 /* ==========================================================================
@@ -234,10 +242,14 @@
    Responsive: stack the workspace on narrow screens
    ========================================================================== */
 @media (max-width: 720px) {
-  .spaces-card { padding: var(--space-5); border-radius: 20px; }
-  .spaces-card__head { top: calc(var(--space-5) * -1); margin: calc(var(--space-5) * -1) calc(var(--space-5) * -1) 0; padding: var(--space-5) var(--space-5) var(--space-3); }
+  .spaces-card__head { padding: var(--space-3) var(--space-4); }
+  .spaces-card__body { padding: var(--space-5) var(--space-4); }
   .space-workspace { flex-direction: column; }
-  .space-nav { flex-basis: auto; width: 100%; }
+  .space-nav {
+    flex: 0 0 auto; width: 100%; max-height: 42vh;
+    border-right: 0; border-bottom: 1px solid var(--border-subtle);
+  }
+  .space-main { padding: var(--space-5) var(--space-4); }
   .space-home__tiles { grid-template-columns: 1fr 1fr; }
 }
 

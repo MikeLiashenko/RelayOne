@@ -144,7 +144,14 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
       el("button", { class: "icon-btn", type: "button", "aria-label": "Close", title: "Close", onClick: close }, closeIcon())
     );
 
-    const card = el("div", { class: "spaces-card" + (opts.wide ? " spaces-card--wide" : "") }, head, ...body);
+    // The body scrolls inside the fixed full-screen frame. `wide` = the Space
+    // workspace, which fills edge-to-edge; other views stay centered & readable.
+    const bodyEl = el(
+      "div",
+      { class: "spaces-card__body" + (opts.wide ? " spaces-card__body--full" : "") },
+      ...body
+    );
+    const card = el("div", { class: "spaces-card" }, head, bodyEl);
     root.append(card);
     return card;
   }
