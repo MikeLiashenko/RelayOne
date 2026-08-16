@@ -79,6 +79,41 @@ describe("spaces (communities)", () => {
     expect(detail.body.data.latestAnnouncement.senderName).toBeTruthy();
   });
 
+  it("lists forum topics with reply counts, most-active first", async () => {
+    const owner = await registerUser(app, { email: "spf@relayone.test", username: "sp_f" });
+    const space = await makeSpace(owner.token);
+    const forum = space.channels.find((c: any) => c.kind === "forum");
+
+    // Two topics (top-level posts) in the forum channel.
+    const t1 = await request(app)
+      .post(`/api/chats/${forum.chatId}/messages`)
+      .set(bearer(owner.token))
+      .send({ content: "Supercell structure\n\nHow does it rotate?" });
+    await request(app)
+      .post(`/api/chats/${forum.chatId}/messages`)
+      .set(bearer(owner.token))
+      .send({ content: "Best storm photography" });
+
+    // A reply to the FIRST topic should bump it to the top by activity.
+    const reply = await request(app)
+      .post(`/api/chats/${forum.chatId}/messages`)
+      .set(bearer(owner.token))
+      .send({ content: "Mesocyclone!", replyToId: t1.body.data.id });
+    expect(reply.status).toBe(201);
+
+    const forumRes = await request(app)
+      .get(`/api/chats/${forum.chatId}/forum`)
+      .set(bearer(owner.token));
+    expect(forumRes.status).toBe(200);
+    // Only the two top-level posts are topics (the reply isn't one).
+    expect(forumRes.body.data).toHaveLength(2);
+    // Topic 1 has 1 reply and, being most-active, sorts first.
+    expect(forumRes.body.data[0].id).toBe(t1.body.data.id);
+    expect(forumRes.body.data[0].replyCount).toBe(1);
+    expect(forumRes.body.data[0].lastActivityAt).toBeTruthy();
+    expect(forumRes.body.data[1].replyCount).toBe(0);
+  });
+
   it("creates a typed, categorized channel", async () => {
     const owner = await registerUser(app, { email: "spt@relayone.test", username: "sp_t" });
     const space = await makeSpace(owner.token);

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, isNotNull, isNull, lt, max } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   attachments,
@@ -217,6 +217,52 @@ export const messageService = {
     const [parentPublic] = await this.hydrate([parent], userId);
     const replies = await this.hydrate(replyRows, userId);
     return { parent: parentPublic!, replies };
+  },
+
+  /**
+   * Forum topics: the top-level posts (messages with no parent) in a forum
+   * channel, each with its reply count and newest-activity time, ordered by
+   * most-recent activity. Replies live under each post as normal threaded
+   * messages, so opening a topic is just the existing thread view.
+   */
+  async listForumTopics(
+    chatId: string,
+    userId: string,
+    opts: { limit: number }
+  ): Promise<Array<PublicMessage & { lastActivityAt: string }>> {
+    await chatService.assertMember(chatId, userId);
+    const db = getDb();
+    const posts = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.chatId, chatId),
+          isNull(messages.replyToId),
+          isNull(messages.deletedAt)
+        )
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(opts.limit);
+    if (posts.length === 0) return [];
+
+    const ids = posts.map((p) => p.id);
+    const lastReplies = await db
+      .select({ pid: messages.replyToId, last: max(messages.createdAt) })
+      .from(messages)
+      .where(and(inArray(messages.replyToId, ids), isNull(messages.deletedAt)))
+      .groupBy(messages.replyToId);
+    const lastByPost = new Map(lastReplies.map((r) => [r.pid, r.last]));
+
+    const hydrated = await this.hydrate(posts, userId);
+    const topics = hydrated.map((m) => {
+      const lr = lastByPost.get(m.id);
+      const lastActivityAt = lr ? new Date(lr as string | Date).toISOString() : m.createdAt;
+      return { ...m, lastActivityAt };
+    });
+    // Most recently active topics first (a reply bumps a post up).
+    topics.sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
+    return topics;
   },
 
   async getForUser(messageId: string, userId: string): Promise<Message> {

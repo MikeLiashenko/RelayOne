@@ -15,6 +15,7 @@ export const api = {
   editMessage: (messageId, content) =>
     apiFetch(`/messages/${messageId}`, { method: "PATCH", body: { content } }),
   getThread: (messageId) => apiFetch(`/messages/${messageId}/thread`),
+  listForum: (chatId) => apiFetch(`/chats/${chatId}/forum`),
   messageHistory: (messageId) => apiFetch(`/messages/${messageId}/history`),
   deleteMessage: (messageId) =>
     apiFetch(`/messages/${messageId}`, { method: "DELETE" }),

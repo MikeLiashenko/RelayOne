@@ -45,6 +45,16 @@ chatsRouter.get(
   })
 );
 
+/** Forum topics (top-level posts + reply counts) for a forum channel. */
+chatsRouter.get(
+  "/:id/forum",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    sendData(res, await messageService.listForumTopics(id, user.id, { limit: 50 }));
+  })
+);
+
 /** Queue a message to be sent later. */
 chatsRouter.post(
   "/:id/schedule",

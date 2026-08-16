@@ -38,10 +38,11 @@ const isCall = (kind) => kind === "voice" || kind === "video";
 
 export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   let root = null;
-  let view = "list"; // "list" | "space"
+  let view = "list"; // "list" | "space" | "forum" | "post"
   let mainView = "home"; // within a space: "home" | "members"
   let spaces = [];
   let current = null; // SpaceDetail
+  let forumChannel = null; // the forum channel being browsed
   let busy = false;
 
   function mount() {
@@ -95,16 +96,18 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   /** Realtime: a Space changed — refresh whatever is on screen. */
   async function onSpaceUpdated(spaceId) {
     if (!root || root.hidden) return;
-    if (view === "space" && current?.id === spaceId) {
+    if (current?.id === spaceId && (view === "space" || view === "forum" || view === "post")) {
       const res = await api.getSpace(spaceId);
-      if (res.ok) {
-        current = res.data;
-        renderSpace();
-      } else {
+      if (!res.ok) {
         current = null;
         view = "list";
         await loadList();
+        return;
       }
+      current = res.data;
+      // Only the workspace re-renders live; forum/post views keep their place
+      // (their member/author lookups just use the refreshed data).
+      if (view === "space") renderSpace();
     } else if (view === "list") {
       await loadList();
     }
@@ -238,7 +241,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
             c.icon || KIND_ICON[c.kind] || "#",
             c.name,
             false,
-            () => (isCall(c.kind) ? startChannelCall(c.chatId, s.id, c.kind === "video" ? "video" : "audio") : openChannel(c.chatId, s.id)),
+            () => openChannelEntry(c),
             myRank >= RANK.admin && s.channels.length > 1
               ? () => deleteChannel(c)
               : null
@@ -272,6 +275,13 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     clear(main);
     if (mainView === "members") main.append(renderMembers());
     else main.append(renderHome());
+  }
+
+  /** Route a channel click by its type: forum → forum view, voice → call, else chat. */
+  function openChannelEntry(c) {
+    if (c.kind === "forum") return openForum(c);
+    if (isCall(c.kind)) return startChannelCall(c.chatId, current.id, c.kind === "video" ? "video" : "audio");
+    return openChannel(c.chatId, current.id);
   }
 
   /* -- Home ---------------------------------------------------------------- */
@@ -339,7 +349,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     const forum = s.channels.find((c) => c.kind === "forum");
     const polls = s.channels.find((c) => c.kind === "poll");
     const voice = s.channels.find((c) => isCall(c.kind));
-    if (forum) tiles.append(homeTile("🧵", forum.name, "Discussions & posts", () => openChannel(forum.chatId, s.id)));
+    if (forum) tiles.append(homeTile("🧵", forum.name, "Discussions & posts", () => openForum(forum)));
     if (polls) tiles.append(homeTile("📊", polls.name, "Vote & see results", () => openChannel(polls.chatId, s.id)));
     if (voice)
       tiles.append(
@@ -355,7 +365,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
       home.append(
         el(
           "button",
-          { class: "btn btn--primary space-home__cta", type: "button", onClick: () => openChannel(entry.chatId, s.id) },
+          { class: "btn btn--primary space-home__cta", type: "button", onClick: () => openChannelEntry(entry) },
           "Join the discussion"
         )
       );
@@ -477,6 +487,199 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     if (!confirm(`Delete #${c.name}? Its messages are removed.`)) return;
     const res = await api.deleteSpaceChannel(c.id);
     if (res.ok) openSpace(current.id);
+  }
+
+  /* -- Forum --------------------------------------------------------------- */
+
+  async function openForum(channel) {
+    view = "forum";
+    forumChannel = channel;
+    renderLoading(`Loading ${channel.name}…`);
+    const res = await api.listForum(channel.chatId);
+    if (!res.ok) return openSpace(current.id);
+    if (view === "forum") renderForum(res.data);
+  }
+
+  function renderForum(topics) {
+    const ch = forumChannel;
+    const members = memberMap();
+
+    const list = el("div", { class: "forum-list" });
+    if (!topics.length) {
+      list.append(
+        el(
+          "div",
+          { class: "spaces-empty" },
+          el("div", { class: "spaces-empty__glyph", text: "🧵" }),
+          el("h3", { text: "No posts yet" }),
+          el("p", { class: "spaces-empty__sub", text: "Start the first discussion in this forum." })
+        )
+      );
+    }
+    for (const t of topics) {
+      const { title, body } = splitTopic(t.content);
+      const author = members.get(t.senderId);
+      list.append(
+        el(
+          "button",
+          { class: "forum-topic", type: "button", onClick: () => openPost(ch, t.id) },
+          el(
+            "div",
+            { class: "forum-topic__body" },
+            el("div", { class: "forum-topic__title", text: title || "(untitled)" }),
+            body ? el("div", { class: "forum-topic__preview", text: preview(body) }) : null,
+            el(
+              "div",
+              { class: "forum-topic__meta" },
+              el("span", { text: author ? author.displayName : "Member" }),
+              el("span", { class: "forum-topic__dot", text: "·" }),
+              el("span", { text: `${t.replyCount} repl${t.replyCount === 1 ? "y" : "ies"}` }),
+              el("span", { class: "forum-topic__dot", text: "·" }),
+              el("span", { text: timeAgo(t.lastActivityAt) })
+            )
+          ),
+          el("span", { class: "forum-topic__count", text: String(t.replyCount) })
+        )
+      );
+    }
+
+    const newBtn = el(
+      "button",
+      { class: "btn btn--primary forum__new", type: "button", onClick: () => showPostForm(ch) },
+      "＋ New post"
+    );
+    shell({ title: `🧵 ${ch.name}`, onBack: () => openSpace(current.id), action: null }, newBtn, list);
+  }
+
+  function showPostForm(ch) {
+    const title = textField("Post title", "120");
+    const bodyInput = el("textarea", {
+      class: "field__input field__textarea",
+      rows: "5",
+      maxlength: "8000",
+      placeholder: "Write your post…",
+    });
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const submit = async () => {
+      const t = title.input.value.trim();
+      if (!t) return showErr(errBox, "Give your post a title.");
+      if (busy) return;
+      const body = bodyInput.value.trim();
+      const content = body ? `${t}\n\n${body}` : t;
+      busy = true;
+      const res = await api.sendMessage(ch.chatId, { content });
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t post.");
+      openForum(ch);
+    };
+    formShell(`🧵 New post`, () => openForum(ch), [
+      title.wrap,
+      el("label", { class: "field" }, el("span", { class: "field__label", text: "Body" }), bodyInput),
+      errBox,
+      formActions(() => openForum(ch), "Post", submit),
+    ]);
+    title.input.focus();
+  }
+
+  async function openPost(ch, messageId) {
+    view = "post";
+    forumChannel = ch;
+    renderLoading("Loading post…");
+    const res = await api.getThread(messageId);
+    if (!res.ok) return openForum(ch);
+    if (view === "post") renderPost(ch, res.data);
+  }
+
+  function renderPost(ch, thread) {
+    const members = memberMap();
+    const post = thread.parent;
+    const { title, body } = splitTopic(post.content);
+    const author = members.get(post.senderId);
+
+    const head = el(
+      "div",
+      { class: "forum-post__head" },
+      el("h1", { class: "forum-post__title", text: title || "(untitled)" }),
+      el(
+        "div",
+        { class: "forum-post__by" },
+        memberAvatar(author || { displayName: "Member" }),
+        el(
+          "div",
+          {},
+          el("div", { class: "forum-post__author", text: author ? author.displayName : "Member" }),
+          el("div", { class: "forum-post__time", text: timeAgo(post.createdAt) })
+        )
+      ),
+      body ? el("div", { class: "forum-post__body", text: body }) : null
+    );
+
+    const replies = el("div", { class: "forum-replies" });
+    replies.append(
+      el("div", { class: "forum-replies__count", text: `${thread.replies.length} repl${thread.replies.length === 1 ? "y" : "ies"}` })
+    );
+    for (const r of thread.replies) {
+      const ra = members.get(r.senderId);
+      replies.append(
+        el(
+          "div",
+          { class: "forum-reply" },
+          memberAvatar(ra || { displayName: "Member" }),
+          el(
+            "div",
+            { class: "forum-reply__body" },
+            el(
+              "div",
+              { class: "forum-reply__meta" },
+              el("span", { class: "forum-reply__author", text: ra ? ra.displayName : "Member" }),
+              el("span", { class: "forum-reply__time", text: timeAgo(r.createdAt) })
+            ),
+            el("div", { class: "forum-reply__text", text: r.content || "" })
+          )
+        )
+      );
+    }
+
+    const replyInput = el("textarea", {
+      class: "field__input field__textarea",
+      rows: "2",
+      maxlength: "8000",
+      placeholder: "Write a reply…",
+    });
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const send = async () => {
+      const content = replyInput.value.trim();
+      if (!content) return;
+      if (busy) return;
+      busy = true;
+      const res = await api.sendMessage(ch.chatId, { content, replyToId: post.id });
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t reply.");
+      openPost(ch, post.id);
+    };
+    const composer = el(
+      "div",
+      { class: "forum-post__composer" },
+      replyInput,
+      errBox,
+      el("button", { class: "btn btn--primary", type: "button", onClick: send }, "Reply")
+    );
+
+    shell({ title: "🧵 Post", onBack: () => openForum(ch) }, el("div", { class: "forum-post" }, head, replies, composer));
+  }
+
+  function memberMap() {
+    const m = new Map();
+    for (const mem of current?.members || []) m.set(mem.user.id, mem.user);
+    return m;
+  }
+
+  /** First line of a post is its title; the rest is the body. */
+  function splitTopic(content) {
+    const text = String(content || "");
+    const nl = text.indexOf("\n");
+    if (nl === -1) return { title: text.trim(), body: "" };
+    return { title: text.slice(0, nl).trim(), body: text.slice(nl + 1).trim() };
   }
 
   /* -- Forms --------------------------------------------------------------- */
