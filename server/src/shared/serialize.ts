@@ -9,6 +9,7 @@ import type {
   PollVote,
   Space,
   SpaceChannel,
+  SpaceCustomRole,
   User,
 } from "../db/schema";
 import { env } from "../config/env";
@@ -21,6 +22,7 @@ import type {
   PublicReaction,
   PublicSpace,
   PublicSpaceChannel,
+  PublicSpaceRole,
   PublicUser,
   SelfUser,
   SpaceRole,
@@ -191,6 +193,15 @@ export function toPublicSpaceChannel(c: SpaceChannel): PublicSpaceChannel {
     kind: c.kind as PublicSpaceChannel["kind"],
     category: c.category,
     position: c.position,
+  };
+}
+
+export function toPublicSpaceRole(r: SpaceCustomRole): PublicSpaceRole {
+  return {
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    permissions: (r.permissions ?? []) as PublicSpaceRole["permissions"],
   };
 }
 

@@ -5,22 +5,28 @@ import {
   chats,
   messages,
   spaceChannels,
+  spaceMemberRoles,
   spaceMembers,
+  spaceRoles,
   spaces,
   users,
+  SPACE_PERMISSIONS,
   type Chat,
   type SpaceChannelKind,
+  type SpacePermission,
   type SpaceRole,
 } from "../db/schema";
 import { AppError } from "../shared/errors";
 import {
   toPublicSpace,
   toPublicSpaceChannel,
+  toPublicSpaceRole,
   toPublicUser,
 } from "../shared/serialize";
 import type {
   PublicSpace,
   PublicSpaceChannel,
+  PublicSpaceRole,
   SpaceDetail,
 } from "../shared/types";
 import { hub } from "../realtime/hub";
@@ -35,6 +41,15 @@ const RANK: Record<SpaceRole, number> = {
 };
 const rankOf = (role: string | null | undefined): number =>
   RANK[(role as SpaceRole) ?? "member"] ?? 0;
+
+/** Permissions each built-in ladder role grants by default (owner ⇒ all). */
+const BUILTIN_PERMS: Record<SpaceRole, SpacePermission[]> = {
+  owner: [...SPACE_PERMISSIONS],
+  admin: ["manage_space", "manage_channels", "manage_roles", "manage_members", "post_announcements"],
+  moderator: ["post_announcements"],
+  contributor: [],
+  member: [],
+};
 
 type ChannelSeed = {
   name: string;
@@ -119,6 +134,38 @@ export const spaceService = {
     return role;
   },
 
+  /* -- Permissions ------------------------------------------------------- */
+
+  /** A member's effective permissions: ladder defaults ∪ every custom role held. */
+  async effectivePermissions(spaceId: string, userId: string): Promise<SpacePermission[]> {
+    const role = await this.getRole(spaceId, userId);
+    if (!role) return [];
+    if (role === "owner") return [...SPACE_PERMISSIONS];
+    const perms = new Set<SpacePermission>(BUILTIN_PERMS[role] ?? []);
+    const rows = await getDb()
+      .select({ permissions: spaceRoles.permissions })
+      .from(spaceMemberRoles)
+      .innerJoin(spaceRoles, eq(spaceRoles.id, spaceMemberRoles.roleId))
+      .where(and(eq(spaceMemberRoles.spaceId, spaceId), eq(spaceMemberRoles.userId, userId)));
+    for (const r of rows) {
+      for (const p of r.permissions ?? []) {
+        if ((SPACE_PERMISSIONS as readonly string[]).includes(p)) perms.add(p as SpacePermission);
+      }
+    }
+    return [...perms];
+  },
+
+  async can(spaceId: string, userId: string, perm: SpacePermission): Promise<boolean> {
+    return (await this.effectivePermissions(spaceId, userId)).includes(perm);
+  },
+
+  /** Throws 403 unless the user holds `perm` in this Space. */
+  async assertCan(spaceId: string, userId: string, perm: SpacePermission): Promise<void> {
+    if (!(await this.can(spaceId, userId, perm))) {
+      throw AppError.forbidden("You don’t have permission to do that in this Space.");
+    }
+  },
+
   async memberIds(spaceId: string): Promise<string[]> {
     const rows = await getDb()
       .select({ userId: spaceMembers.userId })
@@ -184,7 +231,7 @@ export const spaceService = {
       visibility?: "public" | "private";
     }
   ): Promise<SpaceDetail> {
-    await this.assertAtLeast(spaceId, userId, "admin");
+    await this.assertCan(spaceId, userId, "manage_space");
     const db = getDb();
     const set: Record<string, unknown> = {};
     if (patch.name !== undefined) set.name = patch.name;
@@ -261,7 +308,7 @@ export const spaceService = {
     userId: string,
     input: { name: string; icon?: string; kind: SpaceChannelKind; category?: string }
   ): Promise<PublicSpaceChannel> {
-    await this.assertAtLeast(spaceId, userId, "admin");
+    await this.assertCan(spaceId, userId, "manage_channels");
     const existing = await getDb()
       .select({ id: spaceChannels.id })
       .from(spaceChannels)
@@ -280,7 +327,7 @@ export const spaceService = {
       .where(eq(spaceChannels.id, channelId))
       .limit(1);
     if (!channel) throw AppError.notFound("Channel not found.");
-    await this.assertAtLeast(channel.spaceId, userId, "admin");
+    await this.assertCan(channel.spaceId, userId, "manage_channels");
 
     const remaining = await db
       .select({ id: spaceChannels.id })
@@ -337,7 +384,8 @@ export const spaceService = {
     targetId: string,
     role: "admin" | "moderator" | "contributor" | "member"
   ): Promise<SpaceDetail> {
-    const actorRole = await this.assertAtLeast(spaceId, actorId, "admin");
+    const actorRole = await this.assertMember(spaceId, actorId);
+    await this.assertCan(spaceId, actorId, "manage_members");
     if (targetId === actorId) throw AppError.validation("You can’t change your own role.");
     const targetRole = await this.getRole(spaceId, targetId);
     if (!targetRole) throw AppError.notFound("That person isn’t in this Space.");
@@ -359,7 +407,8 @@ export const spaceService = {
 
   /** Remove a member (admin+, strictly below the actor). */
   async kick(spaceId: string, actorId: string, targetId: string): Promise<void> {
-    const actorRole = await this.assertAtLeast(spaceId, actorId, "admin");
+    const actorRole = await this.assertMember(spaceId, actorId);
+    await this.assertCan(spaceId, actorId, "manage_members");
     if (targetId === actorId) throw AppError.validation("Use “Leave” to remove yourself.");
     const targetRole = await this.getRole(spaceId, targetId);
     if (!targetRole) throw AppError.notFound("That person isn’t in this Space.");
@@ -368,6 +417,99 @@ export const spaceService = {
     }
     await this.removeMemberRows(spaceId, targetId);
     await this.notify(spaceId);
+  },
+
+  /* -- Custom roles ------------------------------------------------------ */
+
+  /** Keep only recognised permission strings. */
+  cleanPerms(input: unknown): SpacePermission[] {
+    if (!Array.isArray(input)) return [];
+    const set = new Set<SpacePermission>();
+    for (const p of input) {
+      if ((SPACE_PERMISSIONS as readonly string[]).includes(p)) set.add(p as SpacePermission);
+    }
+    return [...set];
+  },
+
+  async createRole(
+    spaceId: string,
+    userId: string,
+    input: { name: string; color?: string | null; permissions?: string[] }
+  ): Promise<SpaceDetail> {
+    await this.assertCan(spaceId, userId, "manage_roles");
+    const db = getDb();
+    const existing = await db
+      .select({ id: spaceRoles.id })
+      .from(spaceRoles)
+      .where(eq(spaceRoles.spaceId, spaceId));
+    await db.insert(spaceRoles).values({
+      spaceId,
+      name: input.name,
+      color: input.color ?? null,
+      permissions: this.cleanPerms(input.permissions),
+      position: existing.length,
+    });
+    await this.notify(spaceId);
+    return this.getDetail(spaceId, userId);
+  },
+
+  async updateRole(
+    roleId: string,
+    userId: string,
+    patch: { name?: string; color?: string | null; permissions?: string[] }
+  ): Promise<SpaceDetail> {
+    const db = getDb();
+    const [role] = await db.select().from(spaceRoles).where(eq(spaceRoles.id, roleId)).limit(1);
+    if (!role) throw AppError.notFound("Role not found.");
+    await this.assertCan(role.spaceId, userId, "manage_roles");
+    const set: Record<string, unknown> = {};
+    if (patch.name !== undefined) set.name = patch.name;
+    if (patch.color !== undefined) set.color = patch.color;
+    if (patch.permissions !== undefined) set.permissions = this.cleanPerms(patch.permissions);
+    if (Object.keys(set).length) {
+      await db.update(spaceRoles).set(set).where(eq(spaceRoles.id, roleId));
+    }
+    await this.notify(role.spaceId);
+    return this.getDetail(role.spaceId, userId);
+  },
+
+  async deleteRole(roleId: string, userId: string): Promise<void> {
+    const db = getDb();
+    const [role] = await db.select().from(spaceRoles).where(eq(spaceRoles.id, roleId)).limit(1);
+    if (!role) throw AppError.notFound("Role not found.");
+    await this.assertCan(role.spaceId, userId, "manage_roles");
+    await db.delete(spaceRoles).where(eq(spaceRoles.id, roleId)); // assignments cascade
+    await this.notify(role.spaceId);
+  },
+
+  /** Grant or revoke a custom role for a member. */
+  async setRoleAssignment(
+    spaceId: string,
+    actorId: string,
+    targetId: string,
+    roleId: string,
+    assign: boolean
+  ): Promise<SpaceDetail> {
+    await this.assertCan(spaceId, actorId, "manage_roles");
+    const db = getDb();
+    const [role] = await db
+      .select()
+      .from(spaceRoles)
+      .where(and(eq(spaceRoles.id, roleId), eq(spaceRoles.spaceId, spaceId)))
+      .limit(1);
+    if (!role) throw AppError.notFound("Role not found.");
+    if (!(await this.getRole(spaceId, targetId))) {
+      throw AppError.notFound("That person isn’t in this Space.");
+    }
+    if (assign) {
+      await db.insert(spaceMemberRoles).values({ spaceId, userId: targetId, roleId }).onConflictDoNothing();
+    } else {
+      await db
+        .delete(spaceMemberRoles)
+        .where(and(eq(spaceMemberRoles.roleId, roleId), eq(spaceMemberRoles.userId, targetId)));
+    }
+    await this.notify(spaceId);
+    return this.getDetail(spaceId, actorId);
   },
 
   /** Delete a whole Space (owner only). Channels/messages cascade away. */
@@ -434,6 +576,23 @@ export const spaceService = {
 
     const onlineCount = memberRows.filter((m) => hub.isOnline(m.user.id)).length;
 
+    // Custom roles + their assignments (userId → [roleId]).
+    const roleRows = await db
+      .select()
+      .from(spaceRoles)
+      .where(eq(spaceRoles.spaceId, spaceId))
+      .orderBy(spaceRoles.position);
+    const assignments = await db
+      .select()
+      .from(spaceMemberRoles)
+      .where(eq(spaceMemberRoles.spaceId, spaceId));
+    const rolesByUser = new Map<string, string[]>();
+    for (const a of assignments) {
+      const arr = rolesByUser.get(a.userId) ?? [];
+      arr.push(a.roleId);
+      rolesByUser.set(a.userId, arr);
+    }
+
     // Channels grouped: order by section, then position within the section.
     const channels = channelRows
       .map(toPublicSpaceChannel)
@@ -446,9 +605,12 @@ export const spaceService = {
         .map((m) => ({
           user: toPublicUser(m.user),
           role: m.role as SpaceRole,
+          customRoleIds: rolesByUser.get(m.user.id) ?? [],
           joinedAt: m.joinedAt.toISOString(),
         }))
         .sort((a, b) => rankOf(b.role) - rankOf(a.role)),
+      roles: roleRows.map(toPublicSpaceRole),
+      myPermissions: await this.effectivePermissions(spaceId, userId),
       latestAnnouncement: await this.latestAnnouncement(spaceId),
     };
   },
@@ -495,9 +657,8 @@ export const spaceService = {
       .where(eq(spaceChannels.chatId, chat.id))
       .limit(1);
     if (!channel || channel.kind !== "announcement") return;
-    const role = await this.getRole(chat.spaceId, userId);
-    if (!role || rankOf(role) < RANK.moderator) {
-      throw AppError.forbidden("Only moderators and admins can post in an announcement channel.");
+    if (!(await this.can(chat.spaceId, userId, "post_announcements"))) {
+      throw AppError.forbidden("You don’t have permission to post in an announcement channel.");
     }
   },
 

@@ -36,9 +36,18 @@ const KIND_LABEL = {
 const SECTION_ORDER = ["Overview", "Channels", "Voice"];
 const isCall = (kind) => kind === "voice" || kind === "video";
 
+const PERMISSIONS = [
+  ["manage_space", "Manage Space", "Edit name, handle, description, avatar & banner"],
+  ["manage_channels", "Manage channels", "Create and delete channels"],
+  ["manage_roles", "Manage roles", "Create, edit and assign custom roles"],
+  ["manage_members", "Manage members", "Change ladder roles and remove members"],
+  ["post_announcements", "Post announcements", "Post in announcement channels"],
+];
+const ROLE_COLORS = ["#5b6bff", "#7a8cff", "#46d39a", "#f7b955", "#f2732e", "#ff5c78", "#a06bff", "#2bb8c9"];
+
 export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   let root = null;
-  let view = "list"; // "list" | "space" | "forum" | "post"
+  let view = "list"; // "list" | "space" | "forum" | "post" | "roles"
   let mainView = "home"; // within a space: "home" | "members"
   let spaces = [];
   let current = null; // SpaceDetail
@@ -96,7 +105,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   /** Realtime: a Space changed — refresh whatever is on screen. */
   async function onSpaceUpdated(spaceId) {
     if (!root || root.hidden) return;
-    if (current?.id === spaceId && (view === "space" || view === "forum" || view === "post")) {
+    if (current?.id === spaceId && ["space", "forum", "post", "roles"].includes(view)) {
       const res = await api.getSpace(spaceId);
       if (!res.ok) {
         current = null;
@@ -105,9 +114,10 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
         return;
       }
       current = res.data;
-      // Only the workspace re-renders live; forum/post views keep their place
-      // (their member/author lookups just use the refreshed data).
+      // Only the workspace / roles views re-render live; forum & post views keep
+      // their place (their member/author lookups just use the refreshed data).
       if (view === "space") renderSpace();
+      else if (view === "roles") renderRoles();
     } else if (view === "list") {
       await loadList();
     }
@@ -196,7 +206,6 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
 
   function renderSpace() {
     const s = current;
-    const myRank = RANK[s.myRole] ?? 0;
 
     /* Left rail. */
     const nav = el("div", { class: "space-nav" });
@@ -211,7 +220,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
           el("div", { class: "space-nav__name", text: s.name }),
           el("div", { class: "space-nav__handle", text: s.handle ? "@" + s.handle : "" })
         ),
-        myRank >= RANK.admin
+        can("manage_space")
           ? el(
               "button",
               { class: "icon-btn space-nav__gear", type: "button", title: "Space settings", "aria-label": "Space settings", onClick: showEditForm },
@@ -242,19 +251,20 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
             c.name,
             false,
             () => openChannelEntry(c),
-            myRank >= RANK.admin && s.channels.length > 1
-              ? () => deleteChannel(c)
-              : null
+            can("manage_channels") && s.channels.length > 1 ? () => deleteChannel(c) : null
           )
         );
       }
     }
-    if (myRank >= RANK.admin) {
+    if (can("manage_channels")) {
       nav.append(navItem("＋", "Add channel", false, () => showChannelForm(), null, "space-nav__item--add"));
     }
 
     nav.append(el("div", { class: "space-nav__section", text: "Community" }));
     nav.append(navItem("👥", `Members · ${fmt(s.memberCount)}`, mainView === "members", () => selectMain("members")));
+    if (can("manage_roles")) {
+      nav.append(navItem("🎭", `Roles · ${fmt(s.roles.length)}`, false, () => openRoles()));
+    }
 
     /* Main pane. */
     const main = el("div", { class: "space-main", "data-role": "space-main" });
@@ -275,6 +285,16 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     clear(main);
     if (mainView === "members") main.append(renderMembers());
     else main.append(renderHome());
+  }
+
+  /** Does the caller hold a permission in the current Space? */
+  function can(perm) {
+    return (current?.myPermissions || []).includes(perm);
+  }
+  function roleById() {
+    const m = new Map();
+    for (const r of current?.roles || []) m.set(r.id, r);
+    return m;
   }
 
   /** Route a channel click by its type: forum → forum view, voice → call, else chat. */
@@ -380,11 +400,17 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     const s = current;
     const meId = getMe()?.id;
     const myRank = RANK[s.myRole] ?? 0;
+    const roles = roleById();
     const wrap = el("div", { class: "space-members" });
     wrap.append(el("h3", { class: "space-main__title", text: `Members · ${fmt(s.memberCount)}` }));
 
     for (const m of s.members) {
-      const canManage = m.user.id !== meId && myRank > (RANK[m.role] ?? 0) && myRank >= RANK.admin;
+      const canManage = m.user.id !== meId && myRank > (RANK[m.role] ?? 0) && can("manage_members");
+      const badges = el("span", { class: "member-row__badges" }, roleBadge(m.role));
+      for (const rid of m.customRoleIds || []) {
+        const r = roles.get(rid);
+        if (r) badges.append(customRoleChip(r));
+      }
       const row = el(
         "div",
         { class: "member-row" },
@@ -395,9 +421,9 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
           el("span", { class: "member-row__name", text: m.user.displayName }),
           el("span", { class: "member-row__handle", text: `@${m.user.username}` })
         ),
-        roleBadge(m.role)
+        badges
       );
-      if (canManage) row.append(memberMenu(m));
+      if (canManage || (can("manage_roles") && m.user.id !== meId)) row.append(memberMenu(m, canManage));
       wrap.append(row);
     }
 
@@ -440,47 +466,83 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     return wrap;
   }
 
-  function memberMenu(m) {
+  function memberMenu(m, canManage) {
     const s = current;
     const wrap = el("div", { class: "member-row__manage" });
-    const canMakeAdmin = s.myRole === "owner" && m.role !== "admin";
-    const opts = [];
-    if (canMakeAdmin) opts.push(["admin", "Admin"]);
-    if (m.role !== "moderator") opts.push(["moderator", "Moderator"]);
-    if (m.role !== "contributor") opts.push(["contributor", "Contributor"]);
-    if (m.role !== "member") opts.push(["member", "Member"]);
-    for (const [role, label] of opts) {
+
+    if (canManage) {
+      const canMakeAdmin = s.myRole === "owner" && m.role !== "admin";
+      const opts = [];
+      if (canMakeAdmin) opts.push(["admin", "Admin"]);
+      if (m.role !== "moderator") opts.push(["moderator", "Moderator"]);
+      if (m.role !== "contributor") opts.push(["contributor", "Contributor"]);
+      if (m.role !== "member") opts.push(["member", "Member"]);
+      for (const [role, label] of opts) {
+        wrap.append(
+          el(
+            "button",
+            {
+              class: "member-row__act",
+              type: "button",
+              onClick: async () => {
+                const res = await api.setSpaceMemberRole(s.id, m.user.id, role);
+                if (res.ok) openSpace(s.id);
+              },
+            },
+            label
+          )
+        );
+      }
+    }
+
+    // Custom-role toggles (needs manage_roles).
+    if (can("manage_roles")) {
+      const held = new Set(m.customRoleIds || []);
+      for (const r of s.roles) {
+        const on = held.has(r.id);
+        wrap.append(
+          el(
+            "button",
+            {
+              class: "member-row__act member-row__act--role" + (on ? " is-on" : ""),
+              type: "button",
+              style: on && r.color ? `border-color:${r.color};color:${r.color}` : null,
+              onClick: async () => {
+                const res = on
+                  ? await api.unassignSpaceRole(s.id, m.user.id, r.id)
+                  : await api.assignSpaceRole(s.id, m.user.id, r.id);
+                if (res.ok) openSpace(s.id);
+              },
+            },
+            (on ? "✓ " : "+ ") + r.name
+          )
+        );
+      }
+    }
+
+    if (canManage) {
       wrap.append(
         el(
           "button",
           {
-            class: "member-row__act",
+            class: "member-row__act member-row__act--danger",
             type: "button",
             onClick: async () => {
-              const res = await api.setSpaceMemberRole(s.id, m.user.id, role);
+              if (!confirm(`Remove ${m.user.displayName} from the Space?`)) return;
+              const res = await api.kickSpaceMember(s.id, m.user.id);
               if (res.ok) openSpace(s.id);
             },
           },
-          label
+          "Remove"
         )
       );
     }
-    wrap.append(
-      el(
-        "button",
-        {
-          class: "member-row__act member-row__act--danger",
-          type: "button",
-          onClick: async () => {
-            if (!confirm(`Remove ${m.user.displayName} from the Space?`)) return;
-            const res = await api.kickSpaceMember(s.id, m.user.id);
-            if (res.ok) openSpace(s.id);
-          },
-        },
-        "Remove"
-      )
-    );
     return wrap;
+  }
+
+  function customRoleChip(r) {
+    const style = r.color ? `background:${hexToRgba(r.color, 0.18)};color:${r.color}` : null;
+    return el("span", { class: "role-chip", style, text: r.name });
   }
 
   async function deleteChannel(c) {
@@ -680,6 +742,133 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     const nl = text.indexOf("\n");
     if (nl === -1) return { title: text.trim(), body: "" };
     return { title: text.slice(0, nl).trim(), body: text.slice(nl + 1).trim() };
+  }
+
+  /* -- Roles (custom) ------------------------------------------------------ */
+
+  function openRoles() {
+    view = "roles";
+    renderRoles();
+  }
+
+  function renderRoles() {
+    const s = current;
+    const list = el("div", { class: "roles-list" });
+    if (!s.roles.length) {
+      list.append(
+        el(
+          "div",
+          { class: "spaces-empty" },
+          el("div", { class: "spaces-empty__glyph", text: "🎭" }),
+          el("h3", { text: "No custom roles yet" }),
+          el("p", { class: "spaces-empty__sub", text: "Create named, colored roles like “Verified Creator” and grant them permissions." })
+        )
+      );
+    }
+    for (const r of s.roles) {
+      list.append(
+        el(
+          "div",
+          { class: "role-card" },
+          el("span", { class: "role-card__swatch", style: `background:${r.color || "#5b6bff"}` }),
+          el(
+            "div",
+            { class: "role-card__meta" },
+            el("div", { class: "role-card__name", text: r.name }),
+            el("div", {
+              class: "role-card__perms",
+              text: r.permissions.length ? r.permissions.map(permLabel).join(" · ") : "No permissions",
+            })
+          ),
+          el("button", { class: "member-row__act", type: "button", onClick: () => showRoleForm(r) }, "Edit"),
+          el(
+            "button",
+            {
+              class: "member-row__act member-row__act--danger",
+              type: "button",
+              onClick: async () => {
+                if (!confirm(`Delete the “${r.name}” role?`)) return;
+                const res = await api.deleteSpaceRole(s.id, r.id);
+                if (!res.ok) return;
+                const d = await api.getSpace(s.id);
+                if (d.ok) current = d.data;
+                openRoles();
+              },
+            },
+            "Delete"
+          )
+        )
+      );
+    }
+    const newBtn = el("button", { class: "btn btn--primary forum__new", type: "button", onClick: () => showRoleForm(null) }, "＋ New role");
+    shell({ title: "🎭 Roles", onBack: () => openSpace(current.id) }, newBtn, list);
+  }
+
+  function showRoleForm(role) {
+    const s = current;
+    const editing = Boolean(role);
+    const name = textField("Role name", "40");
+    if (role) name.input.value = role.name;
+
+    let color = role?.color || ROLE_COLORS[0];
+    const swatches = el("div", { class: "role-swatches" });
+    for (const c of ROLE_COLORS) {
+      const b = el("button", {
+        type: "button",
+        class: "role-swatch" + (c === color ? " is-active" : ""),
+        style: `background:${c}`,
+        "aria-label": c,
+        onClick: () => {
+          color = c;
+          swatches.querySelectorAll(".role-swatch").forEach((x) => x.classList.remove("is-active"));
+          b.classList.add("is-active");
+        },
+      });
+      swatches.append(b);
+    }
+
+    const held = new Set(role?.permissions || []);
+    const permBoxes = el("div", { class: "perm-list" });
+    for (const [key, label, desc] of PERMISSIONS) {
+      const cb = el("input", { type: "checkbox", class: "perm-check" });
+      cb.checked = held.has(key);
+      cb.dataset.perm = key;
+      permBoxes.append(
+        el(
+          "label",
+          { class: "perm-row" },
+          cb,
+          el("span", {}, el("span", { class: "perm-row__label", text: label }), el("span", { class: "perm-row__desc", text: desc }))
+        )
+      );
+    }
+
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const submit = async () => {
+      const nm = name.input.value.trim();
+      if (!nm) return showErr(errBox, "Name the role.");
+      if (busy) return;
+      const permissions = [...permBoxes.querySelectorAll(".perm-check")].filter((c) => c.checked).map((c) => c.dataset.perm);
+      busy = true;
+      const res = editing
+        ? await api.updateSpaceRole(s.id, role.id, { name: nm, color, permissions })
+        : await api.createSpaceRole(s.id, { name: nm, color, permissions });
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t save the role.");
+      current = res.data;
+      openRoles();
+    };
+
+    formShell(editing ? "🎭 Edit role" : "🎭 New role", () => openRoles(), [
+      name.wrap,
+      el("label", { class: "field__label", text: "Color" }),
+      swatches,
+      el("label", { class: "field__label", text: "Permissions" }),
+      permBoxes,
+      errBox,
+      formActions(() => openRoles(), editing ? "Save role" : "Create role", submit),
+    ]);
+    name.input.focus();
   }
 
   /* -- Forms --------------------------------------------------------------- */
@@ -975,6 +1164,16 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   }
   function fmt(n) {
     return Number(n || 0).toLocaleString();
+  }
+  function permLabel(key) {
+    const p = PERMISSIONS.find((x) => x[0] === key);
+    return p ? p[1] : key;
+  }
+  function hexToRgba(hex, a) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
   }
   function preview(text) {
     const t = String(text || "").replace(/\s+/g, " ").trim();

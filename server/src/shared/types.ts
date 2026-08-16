@@ -153,9 +153,25 @@ export interface PublicSpaceChannel {
   position: number;
 }
 
+export type SpacePermission =
+  | "manage_space"
+  | "manage_channels"
+  | "manage_roles"
+  | "manage_members"
+  | "post_announcements";
+
+export interface PublicSpaceRole {
+  id: string;
+  name: string;
+  color: string | null;
+  permissions: SpacePermission[];
+}
+
 export interface PublicSpaceMember {
   user: PublicUser;
   role: SpaceRole;
+  /** Ids of the custom roles this member holds (resolve against SpaceDetail.roles). */
+  customRoleIds: string[];
   joinedAt: string;
 }
 
@@ -185,10 +201,13 @@ export interface SpaceAnnouncement {
   createdAt: string;
 }
 
-/** Full Space view: channels + members + the caller's role + Home data. */
+/** Full Space view: channels + members + roles + the caller's rights + Home. */
 export interface SpaceDetail extends PublicSpace {
   channels: PublicSpaceChannel[];
   members: PublicSpaceMember[];
+  roles: PublicSpaceRole[];
+  /** The requesting user's effective permissions (for gating the UI). */
+  myPermissions: SpacePermission[];
   latestAnnouncement: SpaceAnnouncement | null;
 }
 

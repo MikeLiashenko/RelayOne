@@ -114,6 +114,79 @@ describe("spaces (communities)", () => {
     expect(forumRes.body.data[1].replyCount).toBe(0);
   });
 
+  it("creates custom roles and a role's permission grants real access", async () => {
+    const owner = await registerUser(app, { email: "spr@relayone.test", username: "sp_r" });
+    const member = await registerUser(app, { email: "sprb@relayone.test", username: "sp_rb" });
+    const space = await makeSpace(owner.token);
+    await request(app).post(`/api/spaces/${space.id}/join`).set(bearer(member.token));
+    const announce = space.channels.find((c: any) => c.kind === "announcement");
+
+    // Baseline: a plain member can't post announcements.
+    const before = await request(app)
+      .post(`/api/chats/${announce.chatId}/messages`)
+      .set(bearer(member.token))
+      .send({ content: "nope" });
+    expect(before.status).toBe(403);
+
+    // Owner creates a "Verified Creator" role that can post announcements.
+    const created = await request(app)
+      .post(`/api/spaces/${space.id}/roles`)
+      .set(bearer(owner.token))
+      .send({ name: "Verified Creator", color: "#5b6bff", permissions: ["post_announcements"] });
+    expect(created.status).toBe(201);
+    const role = created.body.data.roles.find((r: any) => r.name === "Verified Creator");
+    expect(role.permissions).toEqual(["post_announcements"]);
+
+    // A plain member still can't create roles.
+    const forbidden = await request(app)
+      .post(`/api/spaces/${space.id}/roles`)
+      .set(bearer(member.token))
+      .send({ name: "Sneaky", permissions: ["manage_space"] });
+    expect(forbidden.status).toBe(403);
+
+    // Assign the role to the member.
+    const assigned = await request(app)
+      .put(`/api/spaces/${space.id}/members/${member.user.id}/roles/${role.id}`)
+      .set(bearer(owner.token));
+    expect(assigned.status).toBe(200);
+    const mrow = assigned.body.data.members.find((m: any) => m.user.id === member.user.id);
+    expect(mrow.customRoleIds).toContain(role.id);
+
+    // Now the member CAN post an announcement (permission granted by the role).
+    const after = await request(app)
+      .post(`/api/chats/${announce.chatId}/messages`)
+      .set(bearer(member.token))
+      .send({ content: "official via role" });
+    expect(after.status).toBe(201);
+
+    // Removing the role revokes the permission again.
+    await request(app)
+      .delete(`/api/spaces/${space.id}/members/${member.user.id}/roles/${role.id}`)
+      .set(bearer(owner.token));
+    const revoked = await request(app)
+      .post(`/api/chats/${announce.chatId}/messages`)
+      .set(bearer(member.token))
+      .send({ content: "nope again" });
+    expect(revoked.status).toBe(403);
+  });
+
+  it("reports the caller's effective permissions and cleans unknown ones", async () => {
+    const owner = await registerUser(app, { email: "spp@relayone.test", username: "sp_p" });
+    const space = await makeSpace(owner.token);
+    const detail = await request(app).get(`/api/spaces/${space.id}`).set(bearer(owner.token));
+    // Owner has every permission.
+    expect(detail.body.data.myPermissions).toEqual(
+      expect.arrayContaining(["manage_space", "manage_channels", "manage_roles", "manage_members", "post_announcements"])
+    );
+
+    // Unknown permission strings are rejected by validation.
+    const bad = await request(app)
+      .post(`/api/spaces/${space.id}/roles`)
+      .set(bearer(owner.token))
+      .send({ name: "Weird", permissions: ["make_coffee"] });
+    expect(bad.status).toBe(400);
+  });
+
   it("creates a typed, categorized channel", async () => {
     const owner = await registerUser(app, { email: "spt@relayone.test", username: "sp_t" });
     const space = await makeSpace(owner.token);

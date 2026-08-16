@@ -5,8 +5,10 @@ import { spaceService } from "../../services/spaceService";
 import { parse } from "../../validation/parse";
 import {
   createSpaceChannelSchema,
+  createSpaceRoleSchema,
   createSpaceSchema,
   updateSpaceMemberSchema,
+  updateSpaceRoleSchema,
   updateSpaceSchema,
 } from "../../validation/schemas";
 import { asyncHandler, sendData } from "../middleware/http";
@@ -107,6 +109,65 @@ spacesRouter.post(
     const id = parse(idParam, req.params.id);
     const input = parse(createSpaceChannelSchema, req.body);
     sendData(res, await spaceService.createChannel(id, user.id, input), 201);
+  })
+);
+
+/* -- Custom roles ---------------------------------------------------------- */
+
+/** Create a custom role in a Space (needs manage_roles). */
+spacesRouter.post(
+  "/:id/roles",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const input = parse(createSpaceRoleSchema, req.body);
+    sendData(res, await spaceService.createRole(id, user.id, input), 201);
+  })
+);
+
+/** Edit a custom role. */
+spacesRouter.patch(
+  "/:id/roles/:roleId",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const roleId = parse(idParam, req.params.roleId);
+    const patch = parse(updateSpaceRoleSchema, req.body);
+    sendData(res, await spaceService.updateRole(roleId, user.id, patch));
+  })
+);
+
+/** Delete a custom role. */
+spacesRouter.delete(
+  "/:id/roles/:roleId",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const roleId = parse(idParam, req.params.roleId);
+    await spaceService.deleteRole(roleId, user.id);
+    res.status(204).end();
+  })
+);
+
+/** Assign a custom role to a member. */
+spacesRouter.put(
+  "/:id/members/:userId/roles/:roleId",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const targetId = parse(idParam, req.params.userId);
+    const roleId = parse(idParam, req.params.roleId);
+    sendData(res, await spaceService.setRoleAssignment(id, user.id, targetId, roleId, true));
+  })
+);
+
+/** Remove a custom role from a member. */
+spacesRouter.delete(
+  "/:id/members/:userId/roles/:roleId",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const targetId = parse(idParam, req.params.userId);
+    const roleId = parse(idParam, req.params.roleId);
+    sendData(res, await spaceService.setRoleAssignment(id, user.id, targetId, roleId, false));
   })
 );
 

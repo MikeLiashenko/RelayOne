@@ -39,6 +39,15 @@ export const SPACE_CHANNEL_KINDS = [
   "voice",
   "video",
 ] as const;
+
+/** Granular Space permissions that custom roles (and the built-in ladder) grant. */
+export const SPACE_PERMISSIONS = [
+  "manage_space", // edit name/handle/description/avatar/banner/visibility
+  "manage_channels", // create & delete channels
+  "manage_roles", // create/edit/delete + assign custom roles
+  "manage_members", // change built-in ladder roles & remove members
+  "post_announcements", // post in announcement channels
+] as const;
 export const attachmentKindEnum = pgEnum("attachment_kind", [
   "image",
   "video",
@@ -560,6 +569,53 @@ export const spaceChannels = pgTable(
 );
 
 /* ==========================================================================
+   space_roles — custom, named, colored roles with granular permissions
+
+   Additive on top of the built-in ladder: a member keeps one ladder role
+   (owner/admin/…/member) and may also hold any number of custom roles. A
+   member's effective permissions are the union of their ladder role's defaults
+   and every custom role they hold.
+   ========================================================================== */
+
+export const spaceRoles = pgTable(
+  "space_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    spaceId: uuid("space_id")
+      .notNull()
+      .references(() => spaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color"), // hex accent, e.g. "#5b6bff"
+    permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+    position: integer("position").notNull().default(0),
+    createdAt,
+  },
+  (t) => ({
+    bySpace: index("space_roles_space_id_idx").on(t.spaceId),
+  })
+);
+
+export const spaceMemberRoles = pgTable(
+  "space_member_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    spaceId: uuid("space_id")
+      .notNull()
+      .references(() => spaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => spaceRoles.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    assignmentUnique: uniqueIndex("space_member_roles_unique").on(t.roleId, t.userId),
+    byMember: index("space_member_roles_space_user_idx").on(t.spaceId, t.userId),
+  })
+);
+
+/* ==========================================================================
    notifications
    ========================================================================== */
 
@@ -614,3 +670,6 @@ export type SpaceMember = typeof spaceMembers.$inferSelect;
 export type SpaceChannel = typeof spaceChannels.$inferSelect;
 export type SpaceRole = (typeof SPACE_ROLES)[number];
 export type SpaceChannelKind = (typeof SPACE_CHANNEL_KINDS)[number];
+export type SpacePermission = (typeof SPACE_PERMISSIONS)[number];
+export type SpaceCustomRole = typeof spaceRoles.$inferSelect;
+export type SpaceMemberRole = typeof spaceMemberRoles.$inferSelect;

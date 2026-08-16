@@ -69,6 +69,16 @@ export const api = {
     apiFetch(`/spaces/${id}/members/${userId}`, { method: "PATCH", body: { role } }),
   kickSpaceMember: (id, userId) =>
     apiFetch(`/spaces/${id}/members/${userId}`, { method: "DELETE" }),
+  // Custom roles + permissions.
+  createSpaceRole: (id, body) => apiFetch(`/spaces/${id}/roles`, { method: "POST", body }),
+  updateSpaceRole: (id, roleId, patch) =>
+    apiFetch(`/spaces/${id}/roles/${roleId}`, { method: "PATCH", body: patch }),
+  deleteSpaceRole: (id, roleId) =>
+    apiFetch(`/spaces/${id}/roles/${roleId}`, { method: "DELETE" }),
+  assignSpaceRole: (id, userId, roleId) =>
+    apiFetch(`/spaces/${id}/members/${userId}/roles/${roleId}`, { method: "PUT" }),
+  unassignSpaceRole: (id, userId, roleId) =>
+    apiFetch(`/spaces/${id}/members/${userId}/roles/${roleId}`, { method: "DELETE" }),
 
   getUser: (id) => apiFetch(`/users/${id}`),
   updateProfile: (patch) => apiFetch("/users/me", { method: "PATCH", body: patch }),

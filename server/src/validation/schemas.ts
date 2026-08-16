@@ -212,6 +212,32 @@ export const updateSpaceMemberSchema = z.object({
   role: z.enum(["admin", "moderator", "contributor", "member"]),
 });
 
+const spacePermission = z.enum([
+  "manage_space",
+  "manage_channels",
+  "manage_roles",
+  "manage_members",
+  "post_announcements",
+]);
+const hexColor = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, "Use a hex color like #5b6bff.");
+
+export const createSpaceRoleSchema = z.object({
+  name: z.string().trim().min(1).max(40),
+  color: hexColor.nullable().optional(),
+  permissions: z.array(spacePermission).max(20).optional(),
+});
+
+export const updateSpaceRoleSchema = z
+  .object({
+    name: z.string().trim().min(1).max(40).optional(),
+    color: hexColor.nullable().optional(),
+    permissions: z.array(spacePermission).max(20).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "No fields to update.");
+
 /* -- Messages -------------------------------------------------------------- */
 
 export const sendMessageSchema = z
