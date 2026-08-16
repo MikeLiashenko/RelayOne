@@ -12,6 +12,7 @@ import { createViewer } from "./app/viewer.js";
 import { push } from "./app/push.js";
 import { playEffect, effectForEmoji } from "./app/effects.js";
 import { renderMarkdown } from "./app/markdown.js";
+import { locks } from "./app/locks.js";
 import { ACCENTS, getAccent, getThemePref, initTheme, setAccent, setTheme } from "./app/features/theme.js";
 import { createFolders } from "./app/features/folders.js";
 import { ROADMAP } from "./app/features/roadmap.js";
@@ -180,9 +181,12 @@ function wireStaticUI() {
   });
 
   $('[data-action="close-new-chat"]').addEventListener("click", closeNewChat);
-  $('[data-action="back"]').addEventListener("click", () => {
-    $(".messenger").dataset.view = "list";
-  });
+  $$('[data-action="back"]').forEach((b) =>
+    b.addEventListener("click", () => {
+      hideLockScreen();
+      $(".messenger").dataset.view = "list";
+    })
+  );
 
   $('[data-action="call-audio"]').addEventListener("click", () => startCall("audio"));
   $('[data-action="call-video"]').addEventListener("click", () => startCall("video"));
@@ -228,6 +232,21 @@ function wireStaticUI() {
   $('[data-role="poll-quiz"]').addEventListener("change", syncQuizMode);
   $('[data-role="poll-modal"]').addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closePollModal();
+  });
+
+  // 🔒 Chat lock.
+  $('[data-action="toggle-lock"]').addEventListener("click", toggleLock);
+  $('[data-action="lock-unlock"]').addEventListener("click", submitUnlock);
+  $('[data-role="lock-pin"]').addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submitUnlock(); }
+  });
+  $('[data-action="close-setlock"]').addEventListener("click", closeSetLock);
+  $('[data-action="setlock-save"]').addEventListener("click", submitSetLock);
+  $('[data-role="setlock-pin2"]').addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submitSetLock(); }
+  });
+  $('[data-role="setlock-modal"]').addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeSetLock();
   });
 
   // ⏱ Self-destruct + 🕒 Scheduled.
@@ -353,10 +372,14 @@ function renderChatList() {
     const avatarNode = el("div", { class: "chat-item__avatar" });
     renderAvatar(avatarNode, { name, avatarUrl, online });
 
-    const previewNode = draft
-      ? el("span", { class: "chat-item__preview chat-item__preview--draft" },
-          el("span", { class: "chat-item__draft" }, "Draft: "), draft)
-      : el("span", { class: "chat-item__preview" }, mine ? `You: ${preview}` : preview);
+    const locked = locks.isLocked(chat.id);
+    const lockedHidden = locked && !locks.isOpen(chat.id);
+    const previewNode = lockedHidden
+      ? el("span", { class: "chat-item__preview chat-item__preview--locked" }, "🔒 Locked chat")
+      : draft
+        ? el("span", { class: "chat-item__preview chat-item__preview--draft" },
+            el("span", { class: "chat-item__draft" }, "Draft: "), draft)
+        : el("span", { class: "chat-item__preview" }, mine ? `You: ${preview}` : preview);
 
     const menuBtn = el("button", {
       class: "chat-item__menu",
@@ -384,6 +407,7 @@ function renderChatList() {
           "div",
           { class: "chat-item__row" },
           el("span", { class: "chat-item__name" }, name),
+          locked ? el("span", { class: "chat-item__lock", title: "Locked" }, "🔒") : null,
           folders?.isFav(chat.id) ? el("span", { class: "chat-item__fav", title: "Favorite" }, "★") : null,
           el("span", { class: "chat-item__time" }, last ? timeRelative(last.createdAt) : "")
         ),
@@ -608,6 +632,13 @@ async function openChat(id, highlightId = null) {
   $('[data-role="chat-view"]').hidden = false;
   $(".messenger").dataset.view = "chat";
 
+  // 🔒 Locked chat — gate before any message loads.
+  if (locks.isLocked(id) && !locks.isOpen(id)) {
+    showLockScreen(id);
+    return;
+  }
+  hideLockScreen();
+
   const msgEl = $('[data-role="messages"]');
   clear(msgEl);
   state.msgNodes.clear();
@@ -679,6 +710,7 @@ function renderHeader() {
     $$('[data-call-kind="direct"]', actions).forEach((b) => (b.hidden = !isDirect));
     $$('[data-call-kind="group"]', actions).forEach((b) => (b.hidden = !isGroupy));
   }
+  updateLockBtn();
   renderHeaderStatus();
 }
 
@@ -924,6 +956,83 @@ function groupReactions(reactions = []) {
     map.set(r.emoji, cur);
   }
   return [...map.values()];
+}
+
+/* -- 🔒 Chat lock ---------------------------------------------------------- */
+
+function showLockScreen(id) {
+  const chat = state.chats.find((c) => c.id === id);
+  $('[data-role="lock-name"]').textContent = chat ? chatDisplay(chat).name : "Locked chat";
+  $('[data-role="lock-error"]').hidden = true;
+  const pin = $('[data-role="lock-pin"]');
+  pin.value = "";
+  $('[data-role="lock-screen"]').hidden = false;
+  setTimeout(() => pin.focus(), 50);
+}
+function hideLockScreen() {
+  $('[data-role="lock-screen"]').hidden = true;
+}
+async function submitUnlock() {
+  const pinEl = $('[data-role="lock-pin"]');
+  const ok = await locks.verify(state.activeId, pinEl.value);
+  if (!ok) {
+    const e = $('[data-role="lock-error"]');
+    e.textContent = "Wrong PIN. Try again.";
+    e.hidden = false;
+    pinEl.value = "";
+    pinEl.focus();
+    return;
+  }
+  hideLockScreen();
+  openChat(state.activeId);
+}
+
+function updateLockBtn() {
+  const btn = $('[data-role="lock-btn"]');
+  if (!btn) return;
+  const locked = state.activeId && locks.isLocked(state.activeId);
+  btn.classList.toggle("is-active", Boolean(locked));
+  btn.title = locked ? "Locked — click to remove" : "Lock chat";
+}
+function toggleLock() {
+  const id = state.activeId;
+  if (!id) return;
+  if (locks.isLocked(id)) {
+    if (window.confirm("Remove the PIN lock from this chat?")) {
+      locks.removeLock(id);
+      updateLockBtn();
+      renderChatList();
+      toast("Lock removed");
+    }
+  } else {
+    openSetLock();
+  }
+}
+function openSetLock() {
+  $('[data-role="setlock-pin"]').value = "";
+  $('[data-role="setlock-pin2"]').value = "";
+  setSetlockError("");
+  $('[data-role="setlock-modal"]').hidden = false;
+  setTimeout(() => $('[data-role="setlock-pin"]').focus(), 50);
+}
+function closeSetLock() {
+  $('[data-role="setlock-modal"]').hidden = true;
+}
+function setSetlockError(msg) {
+  const e = $('[data-role="setlock-error"]');
+  e.textContent = msg;
+  e.hidden = !msg;
+}
+async function submitSetLock() {
+  const p1 = $('[data-role="setlock-pin"]').value;
+  const p2 = $('[data-role="setlock-pin2"]').value;
+  if (!/^\d{4,}$/.test(p1)) return setSetlockError("PIN must be at least 4 digits.");
+  if (p1 !== p2) return setSetlockError("PINs don't match.");
+  await locks.setLock(state.activeId, p1);
+  closeSetLock();
+  updateLockBtn();
+  renderChatList();
+  toast("Chat locked 🔒");
 }
 
 /* -- ⏱ Self-destruct + 🕒 Scheduled --------------------------------------- */
@@ -1848,6 +1957,7 @@ function wireProfileForms() {
     else if (!$('[data-role="history-modal"]').hidden) closeHistory();
     else if (!$('[data-role="poll-modal"]').hidden) closePollModal();
     else if (!$('[data-role="schedule-modal"]').hidden) closeScheduleModal();
+    else if (!$('[data-role="setlock-modal"]').hidden) closeSetLock();
   });
 }
 

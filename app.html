@@ -158,6 +158,12 @@
           </button>
 
           <div class="chat-header__actions">
+            <button class="icon-btn" type="button" data-action="toggle-lock" data-role="lock-btn" title="Lock chat" aria-label="Lock chat">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.9"/>
+                <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+              </svg>
+            </button>
             <button class="icon-btn" type="button" data-action="shared-media" title="Shared media" aria-label="Shared media">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <rect x="3" y="3" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.8"/>
@@ -284,6 +290,22 @@
           <div class="drop-overlay__box">
             <span class="drop-overlay__icon">📎</span>
             <span>Drop files to send</span>
+          </div>
+        </div>
+
+        <div class="lock-screen" data-role="lock-screen" hidden>
+          <button class="icon-btn lock-screen__back" type="button" data-action="back" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="lock-screen__box">
+            <div class="lock-screen__icon">🔒</div>
+            <div class="lock-screen__title" data-role="lock-name">Locked chat</div>
+            <div class="lock-screen__sub">Enter your PIN to open this chat.</div>
+            <input type="password" inputmode="numeric" autocomplete="off" class="lock-screen__pin" data-role="lock-pin" placeholder="PIN" />
+            <div class="composer-error" data-role="lock-error" hidden></div>
+            <button class="btn btn--primary" type="button" data-action="lock-unlock">Unlock</button>
           </div>
         </div>
       </div>
@@ -413,6 +435,25 @@
     </div>
 
     <!-- ================= SETTINGS MODAL ================= -->
+    <!-- ================= SET LOCK MODAL ================= -->
+    <div class="modal" data-role="setlock-modal" hidden>
+      <div class="modal__card">
+        <header class="modal__head">
+          <h2>🔒 Lock chat</h2>
+          <button class="icon-btn" type="button" data-action="close-setlock" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <p class="setlock__hint">Set a PIN to lock this chat <strong>on this device</strong>. It hides the chat behind a PIN locally — messages still live on the server, and other devices aren't affected. If you forget the PIN you can remove the lock only by clearing site data.</p>
+        <input type="password" inputmode="numeric" autocomplete="off" class="setlock__pin" data-role="setlock-pin" placeholder="New PIN (4+ digits)" />
+        <input type="password" inputmode="numeric" autocomplete="off" class="setlock__pin" data-role="setlock-pin2" placeholder="Confirm PIN" />
+        <div class="composer-error" data-role="setlock-error" hidden></div>
+        <button class="btn btn--primary" type="button" data-action="setlock-save">Lock chat</button>
+      </div>
+    </div>
+
     <!-- ================= SCHEDULE MODAL ================= -->
     <div class="modal" data-role="schedule-modal" hidden>
       <div class="modal__card">

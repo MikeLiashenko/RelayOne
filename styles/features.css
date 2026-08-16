@@ -1136,3 +1136,61 @@
   background: transparent; border: 0; cursor: pointer;
 }
 .schedule-row__cancel:hover { text-decoration: underline; }
+
+/* ==========================================================================
+   🔒 Chat lock
+   ========================================================================== */
+.chat-view { position: relative; }
+
+.chat-item__lock { font-size: 0.75rem; }
+.chat-item__preview--locked { color: var(--text-muted); font-style: italic; }
+[data-role="lock-btn"].is-active { color: var(--color-warning); }
+
+.lock-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(22, 139, 255, 0.10), transparent 60%),
+    var(--surface-card, #11162a);
+}
+.lock-screen[hidden] { display: none; }
+.lock-screen__back { position: absolute; top: var(--space-4); left: var(--space-4); }
+.lock-screen__box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(320px, 100%);
+  text-align: center;
+}
+.lock-screen__icon { font-size: 3rem; }
+.lock-screen__title { font-size: 1.25rem; font-weight: var(--fw-semibold); }
+.lock-screen__sub { font-size: 0.875rem; color: var(--text-muted); }
+.lock-screen__pin {
+  width: 100%;
+  padding: 12px 14px;
+  text-align: center;
+  letter-spacing: 0.3em;
+  font: inherit; font-size: 1.125rem;
+  color: var(--text-primary);
+  background: var(--surface-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.lock-screen .btn { width: 100%; }
+
+.setlock__hint { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin: 0; }
+.setlock__pin {
+  width: 100%;
+  padding: 11px 14px;
+  font: inherit; font-size: 1rem;
+  color: var(--text-primary);
+  background: var(--surface-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
