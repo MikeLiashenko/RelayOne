@@ -108,6 +108,7 @@ const DRAFTS_KEY = "relayone.drafts";
   // Open a chat when arriving from a push notification (?chat=… or a message
   // posted by the service worker after focusing an existing tab).
   openChatFromQuery();
+  openJoinFromQuery();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (e) => {
       if (e.data?.type === "open-chat" && e.data.chatId) openChatSafely(e.data.chatId);
@@ -130,6 +131,24 @@ function openChatFromQuery() {
     // Clean the URL so a refresh doesn't keep reopening it.
     history.replaceState(null, "", location.pathname);
     openChatSafely(id, msg);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Redeem a Space invite link (?join=CODE) on load and open the Space. */
+async function openJoinFromQuery() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const code = params.get("join");
+    if (!code) return;
+    history.replaceState(null, "", location.pathname);
+    const res = await api.joinSpace(code);
+    if (res.ok && res.data) spacesUI?.reopenSpace(res.data.id);
+    else if (spacesUI) {
+      spacesUI.open();
+      if (res.error?.message) alert(res.error.message);
+    }
   } catch {
     /* ignore */
   }

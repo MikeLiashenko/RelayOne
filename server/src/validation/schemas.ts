@@ -201,6 +201,15 @@ export const updateSpaceSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, "No fields to update.");
 
+export const createSpaceInviteSchema = z.object({
+  maxUses: z.number().int().min(1).max(10000).optional(),
+  expiresInHours: z.number().int().min(1).max(24 * 90).optional(),
+});
+
+export const joinSpaceSchema = z.object({
+  target: z.string().trim().min(1).max(80),
+});
+
 export const createSpaceChannelSchema = z.object({
   name: z.string().trim().min(1).max(60),
   icon: z.string().trim().max(8).optional(),

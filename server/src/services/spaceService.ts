@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "../db";
 import {
@@ -5,6 +6,7 @@ import {
   chats,
   messages,
   spaceChannels,
+  spaceInvites,
   spaceMemberRoles,
   spaceMembers,
   spaceRoles,
@@ -20,12 +22,14 @@ import { AppError } from "../shared/errors";
 import {
   toPublicSpace,
   toPublicSpaceChannel,
+  toPublicSpaceInvite,
   toPublicSpaceRole,
   toPublicUser,
 } from "../shared/serialize";
 import type {
   PublicSpace,
   PublicSpaceChannel,
+  PublicSpaceInvite,
   PublicSpaceRole,
   SpaceDetail,
 } from "../shared/types";
@@ -71,6 +75,15 @@ const DEFAULT_CHANNELS: ChannelSeed[] = [
   { name: "lounge", icon: "🔊", kind: "voice", category: "Voice" },
   { name: "voice", icon: "🎙️", kind: "voice", category: "Voice" },
 ];
+
+/** A short, unambiguous invite code (no 0/O/1/I/l). */
+function genCode(len = 8): string {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const b = randomBytes(len);
+  let s = "";
+  for (let i = 0; i < len; i++) s += A[b[i]! % A.length];
+  return s;
+}
 
 /** Slugify a name into a candidate @handle. */
 function slugify(name: string): string {
@@ -342,29 +355,63 @@ export const spaceService = {
     await this.notify(channel.spaceId);
   },
 
-  /** Join a Space: add membership + backfill into every channel chat. */
-  async join(spaceId: string, userId: string): Promise<SpaceDetail> {
+  /**
+   * Add a user to a Space (idempotent): membership + backfill into every
+   * channel chat. Returns true only if they were newly added.
+   */
+  async addMember(spaceId: string, userId: string): Promise<boolean> {
+    if (await this.getRole(spaceId, userId)) return false;
     const db = getDb();
-    const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId)).limit(1);
-    if (!space) throw AppError.notFound("Space not found.");
-
-    if (!(await this.getRole(spaceId, userId))) {
-      await db.insert(spaceMembers).values({ spaceId, userId, role: "member" });
-      const channelChats = await db
-        .select({ chatId: spaceChannels.chatId })
-        .from(spaceChannels)
-        .where(eq(spaceChannels.spaceId, spaceId));
-      if (channelChats.length) {
-        await db
-          .insert(chatMembers)
-          .values(
-            channelChats.map((c) => ({ chatId: c.chatId, userId, role: "member" as const }))
-          )
-          .onConflictDoNothing();
-      }
-      await this.notify(spaceId);
+    await db.insert(spaceMembers).values({ spaceId, userId, role: "member" });
+    const channelChats = await db
+      .select({ chatId: spaceChannels.chatId })
+      .from(spaceChannels)
+      .where(eq(spaceChannels.spaceId, spaceId));
+    if (channelChats.length) {
+      await db
+        .insert(chatMembers)
+        .values(channelChats.map((c) => ({ chatId: c.chatId, userId, role: "member" as const })))
+        .onConflictDoNothing();
     }
+    await this.notify(spaceId);
+    return true;
+  },
+
+  /** Join a Space directly by id (used when you already hold the exact id). */
+  async join(spaceId: string, userId: string): Promise<SpaceDetail> {
+    const [space] = await getDb().select().from(spaces).where(eq(spaces.id, spaceId)).limit(1);
+    if (!space) throw AppError.notFound("Space not found.");
+    await this.addMember(spaceId, userId);
     return this.getDetail(spaceId, userId);
+  },
+
+  /**
+   * Resolve a user-supplied join target — an invite code, an @handle, or an id.
+   * Invite codes work for any Space (including private); handle/id joins are
+   * allowed only for public Spaces.
+   */
+  async resolveJoin(target: string, userId: string): Promise<SpaceDetail> {
+    const db = getDb();
+    const raw = target.trim();
+
+    // 1) Invite code (case-sensitive, exact).
+    const [invite] = await db.select().from(spaceInvites).where(eq(spaceInvites.code, raw)).limit(1);
+    if (invite) return this.redeemInvite(invite.code, userId);
+
+    // 2) @handle or id — public Spaces only.
+    const key = raw.replace(/^@/, "").toLowerCase();
+    const byId = /^[0-9a-f-]{36}$/i.test(raw)
+      ? (await db.select().from(spaces).where(eq(spaces.id, raw)).limit(1))[0]
+      : undefined;
+    const space =
+      byId ??
+      (await db.select().from(spaces).where(eq(spaces.handle, key)).limit(1))[0];
+    if (!space) throw AppError.notFound("No Space found for that code or handle.");
+    if (space.visibility !== "public") {
+      throw AppError.forbidden("This Space is invite-only — ask for an invite link.");
+    }
+    await this.addMember(space.id, userId);
+    return this.getDetail(space.id, userId);
   },
 
   /** Leave a Space (owners must delete it instead). */
@@ -510,6 +557,86 @@ export const spaceService = {
     }
     await this.notify(spaceId);
     return this.getDetail(spaceId, actorId);
+  },
+
+  /* -- Invites ----------------------------------------------------------- */
+
+  /** Create a shareable invite (any member may invite). */
+  async createInvite(
+    spaceId: string,
+    userId: string,
+    input: { maxUses?: number; expiresInHours?: number }
+  ): Promise<PublicSpaceInvite> {
+    await this.assertMember(spaceId, userId);
+    const db = getDb();
+    // A short unique code.
+    let code = genCode();
+    for (let i = 0; i < 5; i++) {
+      const [clash] = await db.select({ id: spaceInvites.id }).from(spaceInvites).where(eq(spaceInvites.code, code)).limit(1);
+      if (!clash) break;
+      code = genCode();
+    }
+    const expiresAt =
+      input.expiresInHours && input.expiresInHours > 0
+        ? new Date(Date.now() + input.expiresInHours * 3600 * 1000)
+        : null;
+    const [invite] = await db
+      .insert(spaceInvites)
+      .values({
+        spaceId,
+        code,
+        createdBy: userId,
+        maxUses: input.maxUses ?? null,
+        expiresAt,
+      })
+      .returning();
+    return toPublicSpaceInvite(invite!);
+  },
+
+  /** List a Space's non-revoked invites (needs manage_members). */
+  async listInvites(spaceId: string, userId: string): Promise<PublicSpaceInvite[]> {
+    await this.assertCan(spaceId, userId, "manage_members");
+    const rows = await getDb()
+      .select()
+      .from(spaceInvites)
+      .where(and(eq(spaceInvites.spaceId, spaceId), isNull(spaceInvites.revokedAt)))
+      .orderBy(desc(spaceInvites.createdAt));
+    return rows.map(toPublicSpaceInvite);
+  },
+
+  /** Revoke an invite (the creator, or anyone with manage_members). */
+  async revokeInvite(inviteId: string, userId: string): Promise<void> {
+    const db = getDb();
+    const [invite] = await db.select().from(spaceInvites).where(eq(spaceInvites.id, inviteId)).limit(1);
+    if (!invite) throw AppError.notFound("Invite not found.");
+    if (invite.createdBy !== userId) {
+      await this.assertCan(invite.spaceId, userId, "manage_members");
+    } else {
+      await this.assertMember(invite.spaceId, userId);
+    }
+    await db.update(spaceInvites).set({ revokedAt: new Date() }).where(eq(spaceInvites.id, inviteId));
+  },
+
+  /** Redeem an invite code and join the Space (works for private Spaces). */
+  async redeemInvite(code: string, userId: string): Promise<SpaceDetail> {
+    const db = getDb();
+    const [invite] = await db.select().from(spaceInvites).where(eq(spaceInvites.code, code)).limit(1);
+    if (!invite) throw AppError.notFound("That invite is invalid.");
+    if (invite.revokedAt) throw AppError.validation("That invite has been revoked.");
+    if (invite.expiresAt && invite.expiresAt.getTime() < Date.now()) {
+      throw AppError.validation("That invite has expired.");
+    }
+    if (invite.maxUses != null && invite.uses >= invite.maxUses) {
+      throw AppError.validation("That invite has reached its use limit.");
+    }
+    const added = await this.addMember(invite.spaceId, userId);
+    if (added) {
+      await db
+        .update(spaceInvites)
+        .set({ uses: invite.uses + 1 })
+        .where(eq(spaceInvites.id, invite.id));
+    }
+    return this.getDetail(invite.spaceId, userId);
   },
 
   /** Delete a whole Space (owner only). Channels/messages cascade away. */

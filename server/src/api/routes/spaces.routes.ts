@@ -5,8 +5,10 @@ import { spaceService } from "../../services/spaceService";
 import { parse } from "../../validation/parse";
 import {
   createSpaceChannelSchema,
+  createSpaceInviteSchema,
   createSpaceRoleSchema,
   createSpaceSchema,
+  joinSpaceSchema,
   updateSpaceMemberSchema,
   updateSpaceRoleSchema,
   updateSpaceSchema,
@@ -34,6 +36,27 @@ spacesRouter.post(
     const { user } = getAuth(req);
     const input = parse(createSpaceSchema, req.body);
     sendData(res, await spaceService.createSpace(user.id, input), 201);
+  })
+);
+
+/** Join a Space by invite code, @handle, or id. Fixed path → precedes "/:id". */
+spacesRouter.post(
+  "/join",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const { target } = parse(joinSpaceSchema, req.body);
+    sendData(res, await spaceService.resolveJoin(target, user.id));
+  })
+);
+
+/** Revoke an invite (creator or manage_members). Fixed path → precedes "/:id". */
+spacesRouter.delete(
+  "/invites/:inviteId",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const inviteId = parse(idParam, req.params.inviteId);
+    await spaceService.revokeInvite(inviteId, user.id);
+    res.status(204).end();
   })
 );
 
@@ -109,6 +132,27 @@ spacesRouter.post(
     const id = parse(idParam, req.params.id);
     const input = parse(createSpaceChannelSchema, req.body);
     sendData(res, await spaceService.createChannel(id, user.id, input), 201);
+  })
+);
+
+/** Create a shareable invite for a Space (any member). */
+spacesRouter.post(
+  "/:id/invites",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const input = parse(createSpaceInviteSchema, req.body);
+    sendData(res, await spaceService.createInvite(id, user.id, input), 201);
+  })
+);
+
+/** List a Space's active invites (needs manage_members). */
+spacesRouter.get(
+  "/:id/invites",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    sendData(res, await spaceService.listInvites(id, user.id));
   })
 );
 

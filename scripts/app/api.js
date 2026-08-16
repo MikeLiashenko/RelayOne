@@ -59,8 +59,13 @@ export const api = {
   createSpace: (body) => apiFetch("/spaces", { method: "POST", body }),
   updateSpace: (id, patch) => apiFetch(`/spaces/${id}`, { method: "PATCH", body: patch }),
   deleteSpace: (id) => apiFetch(`/spaces/${id}`, { method: "DELETE" }),
-  joinSpace: (id) => apiFetch(`/spaces/${id}/join`, { method: "POST" }),
+  // Join by invite code, @handle, or id (server resolves & enforces privacy).
+  joinSpace: (target) => apiFetch("/spaces/join", { method: "POST", body: { target } }),
   leaveSpace: (id) => apiFetch(`/spaces/${id}/leave`, { method: "POST" }),
+  // Invites.
+  createSpaceInvite: (id, body) => apiFetch(`/spaces/${id}/invites`, { method: "POST", body }),
+  listSpaceInvites: (id) => apiFetch(`/spaces/${id}/invites`),
+  revokeSpaceInvite: (inviteId) => apiFetch(`/spaces/invites/${inviteId}`, { method: "DELETE" }),
   createSpaceChannel: (id, body) =>
     apiFetch(`/spaces/${id}/channels`, { method: "POST", body }),
   deleteSpaceChannel: (channelId) =>

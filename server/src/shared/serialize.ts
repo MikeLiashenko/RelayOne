@@ -10,6 +10,7 @@ import type {
   Space,
   SpaceChannel,
   SpaceCustomRole,
+  SpaceInvite,
   User,
 } from "../db/schema";
 import { env } from "../config/env";
@@ -22,6 +23,7 @@ import type {
   PublicReaction,
   PublicSpace,
   PublicSpaceChannel,
+  PublicSpaceInvite,
   PublicSpaceRole,
   PublicUser,
   SelfUser,
@@ -202,6 +204,17 @@ export function toPublicSpaceRole(r: SpaceCustomRole): PublicSpaceRole {
     name: r.name,
     color: r.color,
     permissions: (r.permissions ?? []) as PublicSpaceRole["permissions"],
+  };
+}
+
+export function toPublicSpaceInvite(i: SpaceInvite): PublicSpaceInvite {
+  return {
+    id: i.id,
+    code: i.code,
+    uses: i.uses,
+    maxUses: i.maxUses,
+    expiresAt: iso(i.expiresAt),
+    createdAt: i.createdAt.toISOString(),
   };
 }
 

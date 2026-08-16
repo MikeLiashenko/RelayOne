@@ -191,6 +191,15 @@ export interface PublicSpace {
   createdAt: string;
 }
 
+export interface PublicSpaceInvite {
+  id: string;
+  code: string;
+  uses: number;
+  maxUses: number | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
 /** A compact preview of the Space's newest announcement (for the Home screen). */
 export interface SpaceAnnouncement {
   channelId: string;

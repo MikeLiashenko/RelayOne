@@ -616,6 +616,33 @@ export const spaceMemberRoles = pgTable(
 );
 
 /* ==========================================================================
+   space_invites — shareable invite codes/links into a Space
+
+   A code lets someone join (even a private, invite-only Space). Optional
+   usage cap and expiry; revocable. Redeeming a code adds the user as a member.
+   ========================================================================== */
+
+export const spaceInvites = pgTable(
+  "space_invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    spaceId: uuid("space_id")
+      .notNull()
+      .references(() => spaces.id, { onDelete: "cascade" }),
+    code: text("code").notNull().unique(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    maxUses: integer("max_uses"), // null = unlimited
+    uses: integer("uses").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => ({
+    bySpace: index("space_invites_space_id_idx").on(t.spaceId),
+  })
+);
+
+/* ==========================================================================
    notifications
    ========================================================================== */
 
@@ -673,3 +700,4 @@ export type SpaceChannelKind = (typeof SPACE_CHANNEL_KINDS)[number];
 export type SpacePermission = (typeof SPACE_PERMISSIONS)[number];
 export type SpaceCustomRole = typeof spaceRoles.$inferSelect;
 export type SpaceMemberRole = typeof spaceMemberRoles.$inferSelect;
+export type SpaceInvite = typeof spaceInvites.$inferSelect;

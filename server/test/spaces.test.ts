@@ -187,6 +187,73 @@ describe("spaces (communities)", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("invites: private Spaces need a code; codes let members join and enforce limits", async () => {
+    const owner = await registerUser(app, { email: "spi@relayone.test", username: "sp_i" });
+    const friend = await registerUser(app, { email: "spib@relayone.test", username: "sp_ib" });
+    const other = await registerUser(app, { email: "spic@relayone.test", username: "sp_ic" });
+    const space = await makeSpace(owner.token); // private by default
+
+    // Private Space: can't join by @handle.
+    const blocked = await request(app)
+      .post(`/api/spaces/join`)
+      .set(bearer(friend.token))
+      .send({ target: `@${space.handle}` });
+    expect(blocked.status).toBe(403);
+
+    // Owner creates a single-use invite.
+    const inv = await request(app)
+      .post(`/api/spaces/${space.id}/invites`)
+      .set(bearer(owner.token))
+      .send({ maxUses: 1 });
+    expect(inv.status).toBe(201);
+    const code = inv.body.data.code;
+    expect(code).toBeTruthy();
+
+    // Friend redeems it → joins the private Space.
+    const joined = await request(app).post(`/api/spaces/join`).set(bearer(friend.token)).send({ target: code });
+    expect(joined.status).toBe(200);
+    expect(joined.body.data.id).toBe(space.id);
+    expect(joined.body.data.myRole).toBe("member");
+
+    // The single use is now spent → a second person can't use it.
+    const spent = await request(app).post(`/api/spaces/join`).set(bearer(other.token)).send({ target: code });
+    expect(spent.status).toBe(400);
+
+    // Managers can list invites; the code shows 1/1 uses.
+    const list = await request(app).get(`/api/spaces/${space.id}/invites`).set(bearer(owner.token));
+    expect(list.status).toBe(200);
+    expect(list.body.data[0].uses).toBe(1);
+
+    // A plain member can't list invites.
+    const memberList = await request(app).get(`/api/spaces/${space.id}/invites`).set(bearer(friend.token));
+    expect(memberList.status).toBe(403);
+  });
+
+  it("public Spaces are joinable by @handle; revoked invites stop working", async () => {
+    const owner = await registerUser(app, { email: "spj@relayone.test", username: "sp_j" });
+    const friend = await registerUser(app, { email: "spjb@relayone.test", username: "sp_jb" });
+    const space = await makeSpace(owner.token);
+    await request(app)
+      .patch(`/api/spaces/${space.id}`)
+      .set(bearer(owner.token))
+      .send({ visibility: "public", handle: "public-space" });
+
+    // Public: joinable by @handle directly.
+    const byHandle = await request(app)
+      .post(`/api/spaces/join`)
+      .set(bearer(friend.token))
+      .send({ target: "@public-space" });
+    expect(byHandle.status).toBe(200);
+
+    // Revoked invite can't be redeemed.
+    const inv = await request(app).post(`/api/spaces/${space.id}/invites`).set(bearer(owner.token)).send({});
+    const code = inv.body.data.code;
+    await request(app).delete(`/api/spaces/invites/${inv.body.data.id}`).set(bearer(owner.token));
+    const third = await registerUser(app, { email: "spjc@relayone.test", username: "sp_jc" });
+    const revoked = await request(app).post(`/api/spaces/join`).set(bearer(third.token)).send({ target: code });
+    expect(revoked.status).toBe(400);
+  });
+
   it("creates a typed, categorized channel", async () => {
     const owner = await registerUser(app, { email: "spt@relayone.test", username: "sp_t" });
     const space = await makeSpace(owner.token);

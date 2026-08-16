@@ -330,3 +330,34 @@
 .perm-check { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--color-blue); flex: 0 0 auto; }
 .perm-row__label { display: block; color: var(--text-primary); font-weight: var(--fw-medium); font-size: 0.9rem; }
 .perm-row__desc { display: block; color: var(--text-muted); font-size: 0.8125rem; }
+
+/* ==========================================================================
+   🔗 Invites
+   ========================================================================== */
+
+.invites { display: flex; flex-direction: column; gap: var(--space-3); }
+.invite-create { display: flex; flex-direction: column; gap: var(--space-2); }
+.invite-create .field__label { margin-top: var(--space-2); }
+.invite-create .btn { align-self: flex-start; margin-top: var(--space-2); }
+
+.invite-link {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--surface-field); border: 1px solid var(--border-subtle);
+}
+.invite-link--fresh { border-color: var(--color-blue); box-shadow: 0 0 0 3px rgba(22,139,255,0.12); }
+.invite-link__label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.invite-link__url {
+  font-family: ui-monospace, monospace; font-size: 0.8125rem; color: var(--text-primary);
+  word-break: break-all;
+}
+.invite-link .btn { align-self: flex-start; }
+
+.invite-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  background: var(--surface-field);
+}
+.invite-row__meta { flex: 1; min-width: 0; }
+.invite-row__code { font-family: ui-monospace, monospace; font-weight: var(--fw-semibold); color: var(--color-blue); }
+.invite-row__sub { font-size: 0.8125rem; color: var(--text-muted); }

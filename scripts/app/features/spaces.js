@@ -47,7 +47,7 @@ const ROLE_COLORS = ["#5b6bff", "#7a8cff", "#46d39a", "#f7b955", "#f2732e", "#ff
 
 export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   let root = null;
-  let view = "list"; // "list" | "space" | "forum" | "post" | "roles"
+  let view = "list"; // "list" | "space" | "forum" | "post" | "roles" | "invites"
   let mainView = "home"; // within a space: "home" | "members"
   let spaces = [];
   let current = null; // SpaceDetail
@@ -105,7 +105,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   /** Realtime: a Space changed — refresh whatever is on screen. */
   async function onSpaceUpdated(spaceId) {
     if (!root || root.hidden) return;
-    if (current?.id === spaceId && ["space", "forum", "post", "roles"].includes(view)) {
+    if (current?.id === spaceId && ["space", "forum", "post", "roles", "invites"].includes(view)) {
       const res = await api.getSpace(spaceId);
       if (!res.ok) {
         current = null;
@@ -114,10 +114,11 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
         return;
       }
       current = res.data;
-      // Only the workspace / roles views re-render live; forum & post views keep
-      // their place (their member/author lookups just use the refreshed data).
+      // Only the workspace / roles / invites views re-render live; forum & post
+      // views keep their place (lookups just use the refreshed data).
       if (view === "space") renderSpace();
       else if (view === "roles") renderRoles();
+      else if (view === "invites") openInvites();
     } else if (view === "list") {
       await loadList();
     }
@@ -262,6 +263,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
 
     nav.append(el("div", { class: "space-nav__section", text: "Community" }));
     nav.append(navItem("👥", `Members · ${fmt(s.memberCount)}`, mainView === "members", () => selectMain("members")));
+    nav.append(navItem("🔗", "Invite people", false, () => openInvites()));
     if (can("manage_roles")) {
       nav.append(navItem("🎭", `Roles · ${fmt(s.roles.length)}`, false, () => openRoles()));
     }
@@ -744,6 +746,159 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     return { title: text.slice(0, nl).trim(), body: text.slice(nl + 1).trim() };
   }
 
+  /* -- Invites ------------------------------------------------------------- */
+
+  async function openInvites(showCode = null) {
+    view = "invites";
+    let invites = [];
+    if (can("manage_members")) {
+      const res = await api.listSpaceInvites(current.id);
+      if (res.ok) invites = res.data;
+    }
+    renderInvites(invites, showCode);
+  }
+
+  function renderInvites(invites, showCode) {
+    const s = current;
+    const wrap = el("div", { class: "invites" });
+
+    let maxUses = 0;
+    const usesSeg = segmented(
+      [["0", "No limit"], ["1", "1 use"], ["5", "5 uses"], ["25", "25 uses"]],
+      "0",
+      (v) => (maxUses = Number(v)),
+      "segmented--wrap"
+    );
+    let expH = 0;
+    const expSeg = segmented(
+      [["0", "Never"], ["1", "1 hour"], ["24", "1 day"], ["168", "7 days"]],
+      "0",
+      (v) => (expH = Number(v)),
+      "segmented--wrap"
+    );
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const create = async () => {
+      if (busy) return;
+      busy = true;
+      const body = {};
+      if (maxUses > 0) body.maxUses = maxUses;
+      if (expH > 0) body.expiresInHours = expH;
+      const res = await api.createSpaceInvite(s.id, body);
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t create the invite.");
+      openInvites(res.data.code);
+    };
+
+    wrap.append(
+      el(
+        "div",
+        { class: "invite-create" },
+        el("p", { class: "spaces-form__hint", text: "Create a link people can use to join this Space." }),
+        el("label", { class: "field__label", text: "Max uses" }),
+        usesSeg,
+        el("label", { class: "field__label", text: "Expires" }),
+        expSeg,
+        errBox,
+        el("button", { class: "btn btn--primary", type: "button", onClick: create }, "Create invite link")
+      )
+    );
+
+    if (showCode) wrap.append(inviteLinkCard(showCode, true));
+
+    if (can("manage_members")) {
+      wrap.append(el("h3", { class: "space-main__title", text: "Active invites" }));
+      if (!invites.length) {
+        wrap.append(el("p", { class: "spaces-form__hint", text: "No active invites yet." }));
+      }
+      for (const inv of invites) {
+        wrap.append(inviteRow(inv));
+      }
+    }
+
+    shell({ title: "🔗 Invite people", onBack: () => openSpace(current.id) }, wrap);
+  }
+
+  function inviteLinkCard(code, fresh) {
+    const url = inviteUrl(code);
+    const card = el(
+      "div",
+      { class: "invite-link" + (fresh ? " invite-link--fresh" : "") },
+      el("div", { class: "invite-link__label", text: fresh ? "Your invite link" : "Invite link" }),
+      el("div", { class: "invite-link__url", text: url }),
+      el(
+        "button",
+        {
+          class: "btn btn--primary",
+          type: "button",
+          onClick: (e) => {
+            navigator.clipboard?.writeText(url);
+            e.currentTarget.textContent = "Copied ✓";
+            setTimeout(() => (e.currentTarget.textContent = "Copy link"), 1400);
+          },
+        },
+        "Copy link"
+      )
+    );
+    return card;
+  }
+
+  function inviteRow(inv) {
+    const url = inviteUrl(inv.code);
+    const usesText = inv.maxUses != null ? `${inv.uses}/${inv.maxUses} uses` : `${inv.uses} uses`;
+    const exp = inv.expiresAt ? `expires ${timeUntil(inv.expiresAt)}` : "never expires";
+    return el(
+      "div",
+      { class: "invite-row" },
+      el(
+        "div",
+        { class: "invite-row__meta" },
+        el("code", { class: "invite-row__code", text: inv.code }),
+        el("div", { class: "invite-row__sub", text: `${usesText} · ${exp}` })
+      ),
+      el(
+        "button",
+        {
+          class: "member-row__act",
+          type: "button",
+          onClick: (e) => {
+            navigator.clipboard?.writeText(url);
+            e.currentTarget.textContent = "Copied";
+            setTimeout(() => (e.currentTarget.textContent = "Copy"), 1200);
+          },
+        },
+        "Copy"
+      ),
+      el(
+        "button",
+        {
+          class: "member-row__act member-row__act--danger",
+          type: "button",
+          onClick: async () => {
+            if (!confirm("Revoke this invite?")) return;
+            const res = await api.revokeSpaceInvite(inv.id);
+            if (res.ok) openInvites();
+          },
+        },
+        "Revoke"
+      )
+    );
+  }
+
+  function inviteUrl(code) {
+    try {
+      return new URL(`app.html?join=${encodeURIComponent(code)}`, location.href).href;
+    } catch {
+      return `app.html?join=${code}`;
+    }
+  }
+  function timeUntil(iso) {
+    const s = (new Date(iso).getTime() - Date.now()) / 1000;
+    if (s <= 0) return "soon";
+    if (s < 3600) return `in ${Math.round(s / 60)}m`;
+    if (s < 86400) return `in ${Math.round(s / 3600)}h`;
+    return `in ${Math.round(s / 86400)}d`;
+  }
+
   /* -- Roles (custom) ------------------------------------------------------ */
 
   function openRoles() {
@@ -912,11 +1067,14 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   }
 
   function showJoinForm() {
-    const idf = textField("Space @handle or ID", "60");
+    const idf = textField("Invite code, link or @handle", "120");
     const errBox = el("div", { class: "composer-error", hidden: true });
     const submit = async () => {
-      const raw = idf.input.value.trim().replace(/^@/, "");
-      if (!raw) return showErr(errBox, "Enter a Space handle or ID.");
+      let raw = idf.input.value.trim();
+      // Accept a pasted invite link too (…app.html?join=CODE).
+      const m = raw.match(/[?&]join=([A-Za-z0-9]+)/);
+      if (m) raw = m[1];
+      if (!raw) return showErr(errBox, "Enter an invite code or @handle.");
       if (busy) return;
       busy = true;
       const res = await api.joinSpace(raw);
@@ -926,7 +1084,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
       openSpace(res.data.id);
     };
     formShell("🌐 Join a Space", () => renderList(), [
-      el("p", { class: "spaces-form__hint", text: "Ask an admin for the Space’s @handle or ID, then paste it here." }),
+      el("p", { class: "spaces-form__hint", text: "Paste an invite code or link. Public Spaces can also be joined by @handle." }),
       idf.wrap,
       errBox,
       formActions(() => renderList(), "Join", submit),
