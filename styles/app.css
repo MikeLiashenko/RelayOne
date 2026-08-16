@@ -536,13 +536,24 @@
 .modal__card {
   width: 100%; max-width: 440px;
   display: flex; flex-direction: column; gap: var(--space-3);
-  max-height: 70vh;
+  max-height: 82vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-5);
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 20px;
   box-shadow: 0 30px 80px -40px rgba(0,0,0,0.85);
   animation: modal-rise var(--dur-med) var(--ease-out) both;
+}
+/* Keep the close button reachable while the card scrolls. */
+.modal__head {
+  position: sticky;
+  top: calc(var(--space-5) * -1);
+  margin: calc(var(--space-5) * -1) calc(var(--space-5) * -1) 0;
+  padding: var(--space-5) var(--space-5) var(--space-2);
+  background: var(--surface-card);
+  z-index: 2;
 }
 @keyframes modal-rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 .modal__head { display: flex; align-items: center; justify-content: space-between; }

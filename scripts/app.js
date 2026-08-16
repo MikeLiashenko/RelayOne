@@ -2266,7 +2266,9 @@ function renderWhatsNew() {
   const list = $('[data-role="whatsnew-list"]');
   if (!list) return;
   clear(list);
-  for (const f of ROADMAP) {
+  const fresh = ROADMAP.filter((f) => f.isNew);
+  const earlier = ROADMAP.length - fresh.length;
+  for (const f of fresh) {
     list.append(
       el(
         "li",
@@ -2281,6 +2283,12 @@ function renderWhatsNew() {
         el("span", { class: "whatsnew__badge whatsnew__badge--" + f.status },
           f.status === "live" ? "Available" : "Soon")
       )
+    );
+  }
+  if (earlier > 0) {
+    list.append(
+      el("li", { class: "whatsnew__more" },
+        `Plus ${earlier} earlier features — Folders, Themes, Drafts, Presence & more.`)
     );
   }
 }

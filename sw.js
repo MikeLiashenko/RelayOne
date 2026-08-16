@@ -11,7 +11,7 @@
  * untouched — they always go straight to the network. Non-GET requests
  * (messages, uploads) are never cached.
  */
-const CACHE = "relayone-v2";
+const CACHE = "relayone-v3";
 const SHELL = [
   "./",
   "index.html",
@@ -48,7 +48,10 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return; // API + fonts: network only
 
   event.respondWith(
-    fetch(req)
+    // Force revalidation with the server so a normal reload always gets the
+    // latest code (GitHub Pages caches assets ~10 min; without this the browser
+    // would serve stale scripts and updates wouldn't show until Ctrl+Shift+R).
+    fetch(req.url, { cache: "no-cache", credentials: "same-origin" })
       .then((res) => {
         // Cache good same-origin responses for offline use.
         if (res && res.status === 200 && res.type === "basic") {
