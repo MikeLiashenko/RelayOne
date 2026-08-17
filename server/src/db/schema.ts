@@ -643,6 +643,57 @@ export const spaceInvites = pgTable(
 );
 
 /* ==========================================================================
+   space_events — scheduled events inside a Space (+ RSVPs)
+
+   Members RSVP "going"/"interested" and get notified on creation and again
+   when the event goes live. A live event can link to a voice channel so people
+   can jump straight into its call.
+   ========================================================================== */
+
+export const spaceEvents = pgTable(
+  "space_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    spaceId: uuid("space_id")
+      .notNull()
+      .references(() => spaces.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    // Optional voice channel to join when the event is live.
+    channelId: uuid("channel_id").references(() => spaceChannels.id, { onDelete: "set null" }),
+    // "Starting now" notification bookkeeping (set once the scheduler fires it).
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => ({
+    bySpaceStart: index("space_events_space_starts_idx").on(t.spaceId, t.startsAt),
+    byStart: index("space_events_starts_idx").on(t.startsAt),
+  })
+);
+
+export const spaceEventRsvps = pgTable(
+  "space_event_rsvps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => spaceEvents.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull(), // "going" | "interested"
+    createdAt,
+  },
+  (t) => ({
+    rsvpUnique: uniqueIndex("space_event_rsvps_unique").on(t.eventId, t.userId),
+    byEvent: index("space_event_rsvps_event_idx").on(t.eventId),
+  })
+);
+
+/* ==========================================================================
    notifications
    ========================================================================== */
 
@@ -701,3 +752,5 @@ export type SpacePermission = (typeof SPACE_PERMISSIONS)[number];
 export type SpaceCustomRole = typeof spaceRoles.$inferSelect;
 export type SpaceMemberRole = typeof spaceMemberRoles.$inferSelect;
 export type SpaceInvite = typeof spaceInvites.$inferSelect;
+export type SpaceEvent = typeof spaceEvents.$inferSelect;
+export type SpaceEventRsvp = typeof spaceEventRsvps.$inferSelect;

@@ -200,6 +200,23 @@ export interface PublicSpaceInvite {
   createdAt: string;
 }
 
+export interface PublicSpaceEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  startsAt: string;
+  channelId: string | null;
+  /** The backing chat of the linked voice channel, to start its call when live. */
+  callChatId: string | null;
+  createdBy: string | null;
+  going: number;
+  interested: number;
+  /** The requesting user's RSVP. */
+  myRsvp: "going" | "interested" | null;
+  live: boolean;
+  canceled: boolean;
+}
+
 /** A compact preview of the Space's newest announcement (for the Home screen). */
 export interface SpaceAnnouncement {
   channelId: string;
@@ -218,6 +235,8 @@ export interface SpaceDetail extends PublicSpace {
   /** The requesting user's effective permissions (for gating the UI). */
   myPermissions: SpacePermission[];
   latestAnnouncement: SpaceAnnouncement | null;
+  /** Upcoming + live events, soonest first. */
+  events: PublicSpaceEvent[];
 }
 
 export interface PublicNotification {

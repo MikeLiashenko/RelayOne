@@ -1,6 +1,8 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/api";
+import { notificationService } from "../src/services/notificationService";
+import { spaceService } from "../src/services/spaceService";
 import { bearer, registerUser } from "./helpers";
 
 const app = createApp();
@@ -252,6 +254,88 @@ describe("spaces (communities)", () => {
     const third = await registerUser(app, { email: "spjc@relayone.test", username: "sp_jc" });
     const revoked = await request(app).post(`/api/spaces/join`).set(bearer(third.token)).send({ target: code });
     expect(revoked.status).toBe(400);
+  });
+
+  it("events: create, RSVP counts, cancel, and a Home/detail listing", async () => {
+    const owner = await registerUser(app, { email: "spe@relayone.test", username: "sp_e" });
+    const member = await registerUser(app, { email: "speb@relayone.test", username: "sp_eb" });
+    const space = await makeSpace(owner.token);
+    await request(app).post(`/api/spaces/${space.id}/join`).set(bearer(member.token));
+    const voice = space.channels.find((c: any) => c.kind === "voice");
+
+    const created = await request(app)
+      .post(`/api/spaces/${space.id}/events`)
+      .set(bearer(owner.token))
+      .send({
+        title: "Storm Watch",
+        description: "Live tracking",
+        startsAt: new Date(Date.now() + 3600_000).toISOString(),
+        channelId: voice.id,
+      });
+    expect(created.status).toBe(201);
+    const ev = created.body.data.find((e: any) => e.title === "Storm Watch");
+    expect(ev).toBeTruthy();
+    expect(ev.callChatId).toBe(voice.chatId); // resolves the voice channel's chat
+    expect(ev.live).toBe(false);
+
+    // Member RSVPs "going".
+    const rsvp = await request(app)
+      .put(`/api/spaces/events/${ev.id}/rsvp`)
+      .set(bearer(member.token))
+      .send({ status: "going" });
+    expect(rsvp.status).toBe(200);
+    const after = rsvp.body.data.find((e: any) => e.id === ev.id);
+    expect(after.going).toBe(1);
+    expect(after.myRsvp).toBe("going");
+
+    // Switch to "interested" moves the count.
+    await request(app)
+      .put(`/api/spaces/events/${ev.id}/rsvp`)
+      .set(bearer(member.token))
+      .send({ status: "interested" });
+    const detail = await request(app).get(`/api/spaces/${space.id}`).set(bearer(member.token));
+    const de = detail.body.data.events.find((e: any) => e.id === ev.id);
+    expect(de.interested).toBe(1);
+    expect(de.going).toBe(0);
+    expect(de.myRsvp).toBe("interested");
+
+    // Cancel hides it from listings.
+    const del = await request(app).delete(`/api/spaces/events/${ev.id}`).set(bearer(owner.token));
+    expect(del.status).toBe(204);
+    const list = await request(app).get(`/api/spaces/${space.id}/events`).set(bearer(owner.token));
+    expect(list.body.data.find((e: any) => e.id === ev.id)).toBeUndefined();
+  });
+
+  it("notifies RSVP'd members when an event goes live (scheduler hook)", async () => {
+    const owner = await registerUser(app, { email: "spl@relayone.test", username: "sp_l" });
+    const member = await registerUser(app, { email: "splb@relayone.test", username: "sp_lb" });
+    const space = await makeSpace(owner.token);
+    await request(app).post(`/api/spaces/${space.id}/join`).set(bearer(member.token));
+
+    // An event that already started.
+    const created = await request(app)
+      .post(`/api/spaces/${space.id}/events`)
+      .set(bearer(owner.token))
+      .send({ title: "Live now", startsAt: new Date(Date.now() - 1000).toISOString() });
+    const ev = created.body.data.find((e: any) => e.title === "Live now");
+    expect(ev.live).toBe(true);
+
+    await request(app)
+      .put(`/api/spaces/events/${ev.id}/rsvp`)
+      .set(bearer(member.token))
+      .send({ status: "going" });
+
+    // The scheduler hook fires the "starting now" notification exactly once.
+    const first = await spaceService.notifyDueEvents();
+    expect(first).toBeGreaterThanOrEqual(1);
+    const notes = await notificationService.list(member.user.id, { limit: 20 });
+    expect(notes.some((n) => n.type === "space_event_live")).toBe(true);
+
+    // Idempotent: a second pass doesn't re-fire (notifiedAt already set).
+    const before = (await notificationService.list(member.user.id, { limit: 50 })).length;
+    await spaceService.notifyDueEvents();
+    const afterCount = (await notificationService.list(member.user.id, { limit: 50 })).length;
+    expect(afterCount).toBe(before);
   });
 
   it("creates a typed, categorized channel", async () => {

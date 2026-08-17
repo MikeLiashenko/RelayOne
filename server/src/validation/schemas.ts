@@ -201,6 +201,17 @@ export const updateSpaceSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, "No fields to update.");
 
+export const createSpaceEventSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).optional(),
+  startsAt: z.coerce.date(),
+  channelId: z.string().uuid().optional(),
+});
+
+export const rsvpSchema = z.object({
+  status: z.enum(["going", "interested", "none"]),
+});
+
 export const createSpaceInviteSchema = z.object({
   maxUses: z.number().int().min(1).max(10000).optional(),
   expiresInHours: z.number().int().min(1).max(24 * 90).optional(),

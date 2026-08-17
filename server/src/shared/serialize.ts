@@ -10,6 +10,7 @@ import type {
   Space,
   SpaceChannel,
   SpaceCustomRole,
+  SpaceEvent,
   SpaceInvite,
   User,
 } from "../db/schema";
@@ -23,6 +24,7 @@ import type {
   PublicReaction,
   PublicSpace,
   PublicSpaceChannel,
+  PublicSpaceEvent,
   PublicSpaceInvite,
   PublicSpaceRole,
   PublicUser,
@@ -204,6 +206,34 @@ export function toPublicSpaceRole(r: SpaceCustomRole): PublicSpaceRole {
     name: r.name,
     color: r.color,
     permissions: (r.permissions ?? []) as PublicSpaceRole["permissions"],
+  };
+}
+
+export function toPublicSpaceEvent(
+  e: SpaceEvent,
+  opts: {
+    going: number;
+    interested: number;
+    myRsvp: "going" | "interested" | null;
+    callChatId: string | null;
+    now?: number;
+  }
+): PublicSpaceEvent {
+  const canceled = e.canceledAt != null;
+  const live = !canceled && e.startsAt.getTime() <= (opts.now ?? Date.now());
+  return {
+    id: e.id,
+    title: e.title,
+    description: e.description,
+    startsAt: e.startsAt.toISOString(),
+    channelId: e.channelId,
+    callChatId: opts.callChatId,
+    createdBy: e.createdBy,
+    going: opts.going,
+    interested: opts.interested,
+    myRsvp: opts.myRsvp,
+    live,
+    canceled,
   };
 }
 

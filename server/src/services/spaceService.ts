@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   chatMembers,
   chats,
   messages,
   spaceChannels,
+  spaceEventRsvps,
+  spaceEvents,
   spaceInvites,
   spaceMemberRoles,
   spaceMembers,
@@ -15,6 +17,7 @@ import {
   SPACE_PERMISSIONS,
   type Chat,
   type SpaceChannelKind,
+  type SpaceEvent,
   type SpacePermission,
   type SpaceRole,
 } from "../db/schema";
@@ -22,6 +25,7 @@ import { AppError } from "../shared/errors";
 import {
   toPublicSpace,
   toPublicSpaceChannel,
+  toPublicSpaceEvent,
   toPublicSpaceInvite,
   toPublicSpaceRole,
   toPublicUser,
@@ -29,11 +33,13 @@ import {
 import type {
   PublicSpace,
   PublicSpaceChannel,
+  PublicSpaceEvent,
   PublicSpaceInvite,
   PublicSpaceRole,
   SpaceDetail,
 } from "../shared/types";
 import { hub } from "../realtime/hub";
+import { notificationService } from "./notificationService";
 
 /** Role ranking for permission checks (higher = more powerful). */
 const RANK: Record<SpaceRole, number> = {
@@ -639,6 +645,195 @@ export const spaceService = {
     return this.getDetail(invite.spaceId, userId);
   },
 
+  /* -- Events ------------------------------------------------------------ */
+
+  /** Turn event rows into DTOs with RSVP counts + the viewer's RSVP + join chat. */
+  async hydrateEvents(rows: SpaceEvent[], viewerId: string): Promise<PublicSpaceEvent[]> {
+    if (rows.length === 0) return [];
+    const db = getDb();
+    const ids = rows.map((r) => r.id);
+    const rsvps = await db.select().from(spaceEventRsvps).where(inArray(spaceEventRsvps.eventId, ids));
+
+    const going = new Map<string, number>();
+    const interested = new Map<string, number>();
+    const mine = new Map<string, "going" | "interested">();
+    for (const r of rsvps) {
+      if (r.status === "going") going.set(r.eventId, (going.get(r.eventId) ?? 0) + 1);
+      else if (r.status === "interested") {
+        interested.set(r.eventId, (interested.get(r.eventId) ?? 0) + 1);
+      }
+      if (r.userId === viewerId) mine.set(r.eventId, r.status as "going" | "interested");
+    }
+
+    // Resolve linked channels → their backing chat id (for "join call").
+    const channelIds = [...new Set(rows.map((r) => r.channelId).filter((c): c is string => !!c))];
+    const chanRows = channelIds.length
+      ? await db.select().from(spaceChannels).where(inArray(spaceChannels.id, channelIds))
+      : [];
+    const chatByChannel = new Map(chanRows.map((c) => [c.id, c.chatId]));
+
+    const now = Date.now();
+    return rows.map((e) =>
+      toPublicSpaceEvent(e, {
+        going: going.get(e.id) ?? 0,
+        interested: interested.get(e.id) ?? 0,
+        myRsvp: mine.get(e.id) ?? null,
+        callChatId: e.channelId ? chatByChannel.get(e.channelId) ?? null : null,
+        now,
+      })
+    );
+  },
+
+  /** Upcoming + still-live events for a Space (canceled hidden; live linger 6h). */
+  async eventsForSpace(spaceId: string, viewerId: string): Promise<PublicSpaceEvent[]> {
+    const cutoff = new Date(Date.now() - 6 * 3600 * 1000);
+    const rows = await getDb()
+      .select()
+      .from(spaceEvents)
+      .where(
+        and(
+          eq(spaceEvents.spaceId, spaceId),
+          isNull(spaceEvents.canceledAt),
+          gte(spaceEvents.startsAt, cutoff)
+        )
+      )
+      .orderBy(spaceEvents.startsAt);
+    return this.hydrateEvents(rows, viewerId);
+  },
+
+  async listEvents(spaceId: string, userId: string): Promise<PublicSpaceEvent[]> {
+    await this.assertMember(spaceId, userId);
+    return this.eventsForSpace(spaceId, userId);
+  },
+
+  /** Create an event and notify every member. Any member may create one. */
+  async createEvent(
+    spaceId: string,
+    userId: string,
+    input: { title: string; description?: string; startsAt: Date; channelId?: string }
+  ): Promise<PublicSpaceEvent[]> {
+    await this.assertMember(spaceId, userId);
+    const db = getDb();
+
+    // A linked channel must belong to this Space.
+    if (input.channelId) {
+      const [chan] = await db
+        .select({ id: spaceChannels.id })
+        .from(spaceChannels)
+        .where(and(eq(spaceChannels.id, input.channelId), eq(spaceChannels.spaceId, spaceId)))
+        .limit(1);
+      if (!chan) throw AppError.validation("That channel isn’t in this Space.");
+    }
+
+    const [event] = await db
+      .insert(spaceEvents)
+      .values({
+        spaceId,
+        createdBy: userId,
+        title: input.title,
+        description: input.description ?? null,
+        startsAt: input.startsAt,
+        channelId: input.channelId ?? null,
+      })
+      .returning();
+
+    // Notify everyone else in the Space.
+    const memberIds = await this.memberIds(spaceId);
+    await Promise.all(
+      memberIds
+        .filter((id) => id !== userId)
+        .map((id) =>
+          notificationService.create(id, {
+            type: "space_event",
+            data: { spaceId, eventId: event!.id, title: event!.title },
+          })
+        )
+    );
+    await this.notify(spaceId);
+    return this.eventsForSpace(spaceId, userId);
+  },
+
+  /** Cancel an event (creator, or anyone with manage_members). */
+  async cancelEvent(eventId: string, userId: string): Promise<void> {
+    const db = getDb();
+    const [event] = await db.select().from(spaceEvents).where(eq(spaceEvents.id, eventId)).limit(1);
+    if (!event) throw AppError.notFound("Event not found.");
+    if (event.createdBy !== userId) {
+      await this.assertCan(event.spaceId, userId, "manage_members");
+    } else {
+      await this.assertMember(event.spaceId, userId);
+    }
+    await db.update(spaceEvents).set({ canceledAt: new Date() }).where(eq(spaceEvents.id, eventId));
+    await this.notify(event.spaceId);
+  },
+
+  /** RSVP to an event: "going" | "interested" | "none" (removes the RSVP). */
+  async rsvp(
+    eventId: string,
+    userId: string,
+    status: "going" | "interested" | "none"
+  ): Promise<PublicSpaceEvent[]> {
+    const db = getDb();
+    const [event] = await db.select().from(spaceEvents).where(eq(spaceEvents.id, eventId)).limit(1);
+    if (!event) throw AppError.notFound("Event not found.");
+    await this.assertMember(event.spaceId, userId);
+
+    await db
+      .delete(spaceEventRsvps)
+      .where(and(eq(spaceEventRsvps.eventId, eventId), eq(spaceEventRsvps.userId, userId)));
+    if (status !== "none") {
+      await db.insert(spaceEventRsvps).values({ eventId, userId, status });
+    }
+    await this.notify(event.spaceId);
+    return this.eventsForSpace(event.spaceId, userId);
+  },
+
+  /**
+   * Scheduler hook: notify RSVP'd users of events that have just gone live.
+   * Returns how many events were fired (for logging).
+   */
+  async notifyDueEvents(): Promise<number> {
+    const db = getDb();
+    const now = new Date();
+    const due = await db
+      .select()
+      .from(spaceEvents)
+      .where(
+        and(
+          isNull(spaceEvents.canceledAt),
+          isNull(spaceEvents.notifiedAt),
+          lte(spaceEvents.startsAt, now)
+        )
+      );
+    for (const event of due) {
+      // Claim it first so a concurrent tick doesn't double-notify.
+      const claimed = await db
+        .update(spaceEvents)
+        .set({ notifiedAt: now })
+        .where(and(eq(spaceEvents.id, event.id), isNull(spaceEvents.notifiedAt)))
+        .returning();
+      if (claimed.length === 0) continue;
+
+      const rsvps = await db
+        .select({ userId: spaceEventRsvps.userId })
+        .from(spaceEventRsvps)
+        .where(eq(spaceEventRsvps.eventId, event.id));
+      await Promise.all(
+        rsvps.map((r) =>
+          notificationService.create(r.userId, {
+            type: "space_event_live",
+            data: { spaceId: event.spaceId, eventId: event.id, title: event.title },
+          })
+        )
+      );
+      hub.broadcastToUsers(await this.memberIds(event.spaceId), {
+        type: "space.updated",
+        spaceId: event.spaceId,
+      });
+    }
+    return due.length;
+  },
+
   /** Delete a whole Space (owner only). Channels/messages cascade away. */
   async deleteSpace(spaceId: string, userId: string): Promise<void> {
     const role = await this.assertMember(spaceId, userId);
@@ -739,6 +934,7 @@ export const spaceService = {
       roles: roleRows.map(toPublicSpaceRole),
       myPermissions: await this.effectivePermissions(spaceId, userId),
       latestAnnouncement: await this.latestAnnouncement(spaceId),
+      events: await this.eventsForSpace(spaceId, userId),
     };
   },
 

@@ -5,6 +5,7 @@ import { AppError } from "../shared/errors";
 import { hub } from "../realtime/hub";
 import { chatService } from "./chatService";
 import { messageService } from "./messageService";
+import { spaceService } from "./spaceService";
 
 /**
  * Scheduler for two time-based features:
@@ -93,10 +94,15 @@ export const schedulerService = {
       .where(eq(scheduledMessages.id, id));
   },
 
-  /** One pass: send due scheduled messages, then delete expired ones. */
+  /** One pass: send due scheduled messages, delete expired, fire due events. */
   async tick(): Promise<void> {
     await this.sendDue();
     await this.sweepExpired();
+    try {
+      await spaceService.notifyDueEvents();
+    } catch {
+      /* event notifications shouldn't stall the queue */
+    }
   },
 
   async sendDue(): Promise<void> {

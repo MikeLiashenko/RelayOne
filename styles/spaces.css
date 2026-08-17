@@ -373,3 +373,42 @@
 .invite-row__meta { flex: 1; min-width: 0; }
 .invite-row__code { font-family: ui-monospace, monospace; font-weight: var(--fw-semibold); color: var(--color-blue); }
 .invite-row__sub { font-size: 0.8125rem; color: var(--text-muted); }
+
+/* ==========================================================================
+   📅 Events
+   ========================================================================== */
+
+.events-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.event-card {
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--surface-field); border: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.event-card--live { border-color: var(--color-blue); box-shadow: 0 0 0 3px rgba(22,139,255,0.10); }
+.event-card__head { display: flex; flex-direction: column; gap: 4px; }
+.event-card__when { display: flex; align-items: center; gap: var(--space-2); }
+.event-card__date { font-size: 0.8125rem; font-weight: var(--fw-semibold); color: var(--color-blue); text-transform: uppercase; letter-spacing: 0.03em; }
+.event-card__live { font-size: 0.6875rem; font-weight: var(--fw-semibold); color: #ff5c78; letter-spacing: 0.04em; }
+.event-card__title { font-size: 1.125rem; font-weight: var(--fw-semibold); color: var(--text-primary); }
+.event-card__desc { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; }
+.event-card__counts { font-size: 0.8125rem; color: var(--text-muted); }
+.event-card__actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.event-card__join { margin-left: auto; }
+
+.event-rsvp {
+  font: inherit; font-size: 0.8125rem; font-weight: var(--fw-medium);
+  padding: 8px 16px; border-radius: var(--radius-pill);
+  color: var(--text-secondary); background: var(--surface-card);
+  border: 1px solid var(--border-subtle); cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-soft), color var(--dur-fast) var(--ease-soft);
+}
+.event-rsvp:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.event-rsvp.is-active { color: #fff; border-color: transparent; }
+.event-rsvp--going.is-active { background: linear-gradient(135deg,#46d39a,#2bb37f); }
+.event-rsvp--interested.is-active { background: linear-gradient(135deg,#7a8cff,#5b6bff); }
+
+/* Home upcoming-events card */
+.space-home__event-line { display: flex; align-items: baseline; gap: var(--space-2); margin-top: 4px; }
+.space-home__event-when { font-size: 0.75rem; color: var(--color-blue); font-weight: var(--fw-semibold); white-space: nowrap; }
+.space-home__event-title { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.space-home__event-line .event-card__live { margin-left: auto; }

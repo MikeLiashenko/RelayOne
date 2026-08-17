@@ -5,10 +5,12 @@ import { spaceService } from "../../services/spaceService";
 import { parse } from "../../validation/parse";
 import {
   createSpaceChannelSchema,
+  createSpaceEventSchema,
   createSpaceInviteSchema,
   createSpaceRoleSchema,
   createSpaceSchema,
   joinSpaceSchema,
+  rsvpSchema,
   updateSpaceMemberSchema,
   updateSpaceRoleSchema,
   updateSpaceSchema,
@@ -57,6 +59,28 @@ spacesRouter.delete(
     const inviteId = parse(idParam, req.params.inviteId);
     await spaceService.revokeInvite(inviteId, user.id);
     res.status(204).end();
+  })
+);
+
+/** Cancel an event (creator or manage_members). Fixed path → precedes "/:id". */
+spacesRouter.delete(
+  "/events/:eventId",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const eventId = parse(idParam, req.params.eventId);
+    await spaceService.cancelEvent(eventId, user.id);
+    res.status(204).end();
+  })
+);
+
+/** RSVP to an event (going/interested/none). Fixed path → precedes "/:id". */
+spacesRouter.put(
+  "/events/:eventId/rsvp",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const eventId = parse(idParam, req.params.eventId);
+    const { status } = parse(rsvpSchema, req.body);
+    sendData(res, await spaceService.rsvp(eventId, user.id, status));
   })
 );
 
@@ -132,6 +156,27 @@ spacesRouter.post(
     const id = parse(idParam, req.params.id);
     const input = parse(createSpaceChannelSchema, req.body);
     sendData(res, await spaceService.createChannel(id, user.id, input), 201);
+  })
+);
+
+/** Upcoming + live events in a Space. */
+spacesRouter.get(
+  "/:id/events",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    sendData(res, await spaceService.listEvents(id, user.id));
+  })
+);
+
+/** Create an event in a Space (any member). */
+spacesRouter.post(
+  "/:id/events",
+  asyncHandler(async (req, res) => {
+    const { user } = getAuth(req);
+    const id = parse(idParam, req.params.id);
+    const input = parse(createSpaceEventSchema, req.body);
+    sendData(res, await spaceService.createEvent(id, user.id, input), 201);
   })
 );
 

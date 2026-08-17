@@ -62,6 +62,12 @@ export const api = {
   // Join by invite code, @handle, or id (server resolves & enforces privacy).
   joinSpace: (target) => apiFetch("/spaces/join", { method: "POST", body: { target } }),
   leaveSpace: (id) => apiFetch(`/spaces/${id}/leave`, { method: "POST" }),
+  // Events.
+  listSpaceEvents: (id) => apiFetch(`/spaces/${id}/events`),
+  createSpaceEvent: (id, body) => apiFetch(`/spaces/${id}/events`, { method: "POST", body }),
+  cancelSpaceEvent: (eventId) => apiFetch(`/spaces/events/${eventId}`, { method: "DELETE" }),
+  rsvpEvent: (eventId, status) =>
+    apiFetch(`/spaces/events/${eventId}/rsvp`, { method: "PUT", body: { status } }),
   // Invites.
   createSpaceInvite: (id, body) => apiFetch(`/spaces/${id}/invites`, { method: "POST", body }),
   listSpaceInvites: (id) => apiFetch(`/spaces/${id}/invites`),

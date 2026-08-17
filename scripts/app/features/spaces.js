@@ -47,7 +47,7 @@ const ROLE_COLORS = ["#5b6bff", "#7a8cff", "#46d39a", "#f7b955", "#f2732e", "#ff
 
 export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   let root = null;
-  let view = "list"; // "list" | "space" | "forum" | "post" | "roles" | "invites"
+  let view = "list"; // "list" | "space" | "forum" | "post" | "roles" | "invites" | "events"
   let mainView = "home"; // within a space: "home" | "members"
   let spaces = [];
   let current = null; // SpaceDetail
@@ -113,7 +113,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   /** Realtime: a Space changed — refresh whatever is on screen. */
   async function onSpaceUpdated(spaceId) {
     if (!root || root.hidden) return;
-    if (current?.id === spaceId && ["space", "forum", "post", "roles", "invites"].includes(view)) {
+    if (current?.id === spaceId && ["space", "forum", "post", "roles", "invites", "events"].includes(view)) {
       const res = await api.getSpace(spaceId);
       if (!res.ok) {
         current = null;
@@ -122,11 +122,12 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
         return;
       }
       current = res.data;
-      // Only the workspace / roles / invites views re-render live; forum & post
-      // views keep their place (lookups just use the refreshed data).
+      // Only the workspace / roles / invites / events views re-render live; forum
+      // & post views keep their place (lookups just use the refreshed data).
       if (view === "space") renderSpace();
       else if (view === "roles") renderRoles();
       else if (view === "invites") openInvites();
+      else if (view === "events") renderEvents();
     } else if (view === "list") {
       await loadList();
     }
@@ -278,6 +279,7 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
 
     nav.append(el("div", { class: "space-nav__section", text: "Community" }));
     nav.append(navItem("👥", `Members · ${fmt(s.memberCount)}`, mainView === "members", () => selectMain("members")));
+    nav.append(navItem("📅", `Events${s.events.length ? " · " + fmt(s.events.length) : ""}`, false, () => openEvents()));
     nav.append(navItem("🔗", "Invite people", false, () => openInvites()));
     if (can("manage_roles")) {
       nav.append(navItem("🎭", `Roles · ${fmt(s.roles.length)}`, false, () => openRoles()));
@@ -376,6 +378,32 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
             el("div", { class: "space-home__card-title", text: "Latest announcement" }),
             el("div", { class: "space-home__card-text", text: preview(a.content) || "New announcement" }),
             el("div", { class: "space-home__card-sub", text: `${a.senderName} · ${timeAgo(a.createdAt)}` })
+          )
+        )
+      );
+    }
+
+    // Upcoming events card.
+    const upcoming = (s.events || []).slice(0, 3);
+    if (upcoming.length) {
+      home.append(
+        el(
+          "button",
+          { class: "space-home__card space-home__events", type: "button", onClick: () => openEvents() },
+          el("div", { class: "space-home__card-icon", text: "📅" }),
+          el(
+            "div",
+            { class: "space-home__card-body" },
+            el("div", { class: "space-home__card-title", text: "Upcoming events" }),
+            ...upcoming.map((e) =>
+              el(
+                "div",
+                { class: "space-home__event-line" },
+                el("span", { class: "space-home__event-when", text: eventDate(e.startsAt) }),
+                el("span", { class: "space-home__event-title", text: e.title }),
+                e.live ? el("span", { class: "event-card__live", text: "LIVE" }) : null
+              )
+            )
           )
         )
       );
@@ -759,6 +787,164 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
     const nl = text.indexOf("\n");
     if (nl === -1) return { title: text.trim(), body: "" };
     return { title: text.slice(0, nl).trim(), body: text.slice(nl + 1).trim() };
+  }
+
+  /* -- Events -------------------------------------------------------------- */
+
+  function openEvents() {
+    view = "events";
+    renderEvents();
+  }
+
+  function renderEvents() {
+    const s = current;
+    const meId = getMe()?.id;
+    const list = el("div", { class: "events-list" });
+
+    if (!s.events.length) {
+      list.append(
+        el(
+          "div",
+          { class: "spaces-empty" },
+          el("div", { class: "spaces-empty__glyph", text: "📅" }),
+          el("h3", { text: "No events yet" }),
+          el("p", { class: "spaces-empty__sub", text: "Schedule a watch party, a call or a meetup — members get notified." })
+        )
+      );
+    }
+
+    for (const ev of s.events) {
+      const canCancel = ev.createdBy === meId || can("manage_members");
+      const card = el(
+        "div",
+        { class: "event-card" + (ev.live ? " event-card--live" : "") },
+        el(
+          "div",
+          { class: "event-card__head" },
+          el(
+            "div",
+            { class: "event-card__when" },
+            el("span", { class: "event-card__date", text: eventDate(ev.startsAt) }),
+            ev.live ? el("span", { class: "event-card__live", text: "● LIVE" }) : null
+          ),
+          el("div", { class: "event-card__title", text: ev.title }),
+          ev.description ? el("div", { class: "event-card__desc", text: ev.description }) : null,
+          el(
+            "div",
+            { class: "event-card__counts", text: `${fmt(ev.going)} going · ${fmt(ev.interested)} interested` }
+          )
+        ),
+        el(
+          "div",
+          { class: "event-card__actions" },
+          rsvpBtn(ev, "interested", "Interested"),
+          rsvpBtn(ev, "going", "Going"),
+          ev.live && ev.callChatId
+            ? el(
+                "button",
+                {
+                  class: "btn btn--primary event-card__join",
+                  type: "button",
+                  onClick: () => startChannelCall(ev.callChatId, s.id, "audio"),
+                },
+                "Join call"
+              )
+            : null,
+          canCancel
+            ? el(
+                "button",
+                {
+                  class: "member-row__act member-row__act--danger",
+                  type: "button",
+                  onClick: async () => {
+                    if (!confirm(`Cancel “${ev.title}”?`)) return;
+                    const res = await api.cancelSpaceEvent(ev.id);
+                    if (!res.ok) return;
+                    const fresh = await api.listSpaceEvents(s.id);
+                    if (fresh.ok) current.events = fresh.data;
+                    openEvents();
+                  },
+                },
+                "Cancel"
+              )
+            : null
+        )
+      );
+      list.append(card);
+    }
+
+    const newBtn = el("button", { class: "btn btn--primary forum__new", type: "button", onClick: () => showEventForm() }, "＋ New event");
+    shell({ title: "📅 Events", onBack: () => openSpace(current.id) }, newBtn, list);
+  }
+
+  function rsvpBtn(ev, status, label) {
+    const active = ev.myRsvp === status;
+    return el(
+      "button",
+      {
+        class: "event-rsvp" + (active ? " is-active event-rsvp--" + status : ""),
+        type: "button",
+        onClick: async () => {
+          const res = await api.rsvpEvent(ev.id, active ? "none" : status);
+          if (res.ok) {
+            current.events = res.data;
+            renderEvents();
+          }
+        },
+      },
+      (active ? "✓ " : "") + label
+    );
+  }
+
+  function showEventForm() {
+    const s = current;
+    const title = textField("Event title", "120");
+    const desc = el("textarea", { class: "field__input field__textarea", rows: "3", maxlength: "1000", placeholder: "What’s it about? (optional)" });
+    const when = el("input", { class: "field__input", type: "datetime-local" });
+
+    // Optional voice/video channel to turn into a call when live.
+    const select = el("select", { class: "field__input" }, el("option", { value: "" }, "No call channel"));
+    for (const c of s.channels.filter((c) => c.kind === "voice" || c.kind === "video")) {
+      select.append(el("option", { value: c.id }, `${c.icon || "🔊"} ${c.name}`));
+    }
+
+    const errBox = el("div", { class: "composer-error", hidden: true });
+    const submit = async () => {
+      const t = title.input.value.trim();
+      if (!t) return showErr(errBox, "Give the event a title.");
+      if (!when.value) return showErr(errBox, "Pick a date and time.");
+      const startsAt = new Date(when.value);
+      if (isNaN(startsAt.getTime())) return showErr(errBox, "That date looks off.");
+      if (busy) return;
+      busy = true;
+      const res = await api.createSpaceEvent(s.id, {
+        title: t,
+        description: desc.value.trim() || undefined,
+        startsAt: startsAt.toISOString(),
+        channelId: select.value || undefined,
+      });
+      busy = false;
+      if (!res.ok) return showErr(errBox, res.error?.message || "Couldn’t create the event.");
+      current.events = res.data;
+      openEvents();
+    };
+
+    formShell("📅 New event", () => openEvents(), [
+      title.wrap,
+      el("label", { class: "field" }, el("span", { class: "field__label", text: "Description" }), desc),
+      el("label", { class: "field" }, el("span", { class: "field__label", text: "When" }), when),
+      el("label", { class: "field" }, el("span", { class: "field__label", text: "Call channel (optional)" }), select),
+      errBox,
+      formActions(() => openEvents(), "Create event", submit),
+    ]);
+    title.input.focus();
+  }
+
+  function eventDate(iso) {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString([], { day: "numeric", month: "short" });
+    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return `${date} · ${time}`;
   }
 
   /* -- Invites ------------------------------------------------------------- */
