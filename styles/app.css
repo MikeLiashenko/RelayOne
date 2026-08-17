@@ -63,6 +63,9 @@
 .icon-btn:active { transform: scale(0.92); }
 .icon-btn:disabled { opacity: 0.4; cursor: default; }
 .icon-btn svg { width: 20px; height: 20px; }
+/* Our display:inline-grid would otherwise defeat [hidden] — so the header's
+   1:1-vs-group call buttons must both show. Restore hidden = actually hidden. */
+.icon-btn[hidden] { display: none; }
 
 .search-input {
   width: 100%;
