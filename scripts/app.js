@@ -649,6 +649,8 @@ function openSearchResult(action) {
 /* -- Open a chat ----------------------------------------------------------- */
 
 async function openChat(id, highlightId = null) {
+  // A Space overlay covers the chat pane — hide it so the chat is visible.
+  spacesUI?.close();
   state.activeId = id;
   // If we arrived via a Space channel, remember it so "back" returns there.
   state.activeSpaceId = state.pendingSpaceId || null;
