@@ -5,9 +5,9 @@
    airy spacing, large headings, soft panels, minimal dividers.
    ========================================================================== */
 
-/* Full-screen app surface — a Space fills the whole window, not a floating card. */
+/* Fills the chat pane (not the whole window) — the chat list stays beside it. */
 .spaces-overlay {
-  position: fixed; inset: 0; z-index: 340;
+  position: absolute; inset: 0; z-index: 60;
   background: var(--surface-app, var(--surface-card));
   animation: modal-fade var(--dur-fast) var(--ease-soft) both;
 }

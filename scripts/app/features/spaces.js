@@ -57,27 +57,35 @@ export function createSpaces({ api, getMe, openChannel, startChannelCall }) {
   function mount() {
     if (root) return;
     root = el("div", { class: "spaces-overlay", "data-role": "spaces-overlay", hidden: true });
-    root.addEventListener("click", (e) => {
-      if (e.target === root) close();
-    });
-    document.body.append(root);
+    // Live inside the chat pane so a Space fills the conversation area while the
+    // chat list stays visible beside it (on mobile the pane is the whole screen).
+    (document.querySelector(".chat-pane") || document.body).append(root);
+  }
+
+  /** Show over the chat pane (switches the mobile view so the pane is visible). */
+  function reveal() {
+    mount();
+    root.hidden = false;
+    const m = document.querySelector(".messenger");
+    if (m) m.dataset.view = "chat";
   }
 
   function close() {
     if (root) root.hidden = true;
+    // Back to the chat list (matters on mobile, no-op on desktop).
+    const m = document.querySelector(".messenger");
+    if (m) m.dataset.view = "list";
   }
 
   async function open() {
-    mount();
-    root.hidden = false;
+    reveal();
     view = "list";
     await loadList();
   }
 
   /** Re-show a Space (used by the chat "back" button). */
   async function reopenSpace(spaceId) {
-    mount();
-    root.hidden = false;
+    reveal();
     mainView = "home";
     await openSpace(spaceId);
   }
